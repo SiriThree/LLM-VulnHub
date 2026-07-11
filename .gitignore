@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.py[cod]
+.venv/
+llm_vulnhub.db
+*.log
+
+node_modules/
+.next/
+out/
+dist/
+
+postgres_data/

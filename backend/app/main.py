@@ -1,0 +1,37 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api import ai, collectors, rag, sources, tasks, vulnerabilities
+from app.core.config import get_settings
+from app.db import models
+from app.db.session import Base, engine
+
+settings = get_settings()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title=settings.app_name, version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_origin_regex=settings.cors_origin_regex,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.include_router(vulnerabilities.router, prefix=settings.api_v1_prefix)
+    app.include_router(ai.router, prefix=settings.api_v1_prefix)
+    app.include_router(rag.router, prefix=settings.api_v1_prefix)
+    app.include_router(sources.router, prefix=settings.api_v1_prefix)
+    app.include_router(collectors.router, prefix=settings.api_v1_prefix)
+    app.include_router(tasks.router, prefix=settings.api_v1_prefix)
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok", "app": settings.app_name}
+
+    return app
+
+
+Base.metadata.create_all(bind=engine)
+app = create_app()
