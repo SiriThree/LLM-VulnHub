@@ -1,0 +1,165 @@
+{
+  "summary": {
+    "provider": "mock",
+    "dataset_size": 10,
+    "positive_samples": 6,
+    "triage_accuracy": 1.0,
+    "triage_precision": 1.0,
+    "triage_recall": 1.0,
+    "extraction_field_exact_match": {
+      "vuln_type": 0.5,
+      "severity": 0.8333333333333334,
+      "affected_component": 0.5
+    },
+    "extraction_completeness": 1.0,
+    "merge_precision": 0.3333333333333333
+  },
+  "samples": [
+    {
+      "id": "triage-pos-001",
+      "expected_ai": true,
+      "predicted_ai": true,
+      "triage_correct": true,
+      "confidence": 0.92,
+      "extraction_exact": {
+        "vuln_type": true,
+        "severity": true,
+        "affected_component": true
+      },
+      "extraction_completeness": 1.0,
+      "merge_correct": false,
+      "errors": [
+        "Asset Impact Agent: Missing required keys: impacted_assets, tenant_scope, blast_radius, operational_risk, asset_summary"
+      ]
+    },
+    {
+      "id": "triage-pos-002",
+      "expected_ai": true,
+      "predicted_ai": true,
+      "triage_correct": true,
+      "confidence": 0.92,
+      "extraction_exact": {
+        "vuln_type": true,
+        "severity": true,
+        "affected_component": true
+      },
+      "extraction_completeness": 1.0,
+      "merge_correct": false,
+      "errors": [
+        "Asset Impact Agent: Missing required keys: impacted_assets, tenant_scope, blast_radius, operational_risk, asset_summary"
+      ]
+    },
+    {
+      "id": "triage-pos-003",
+      "expected_ai": true,
+      "predicted_ai": true,
+      "triage_correct": true,
+      "confidence": 0.92,
+      "extraction_exact": {
+        "vuln_type": false,
+        "severity": true,
+        "affected_component": false
+      },
+      "extraction_completeness": 1.0,
+      "merge_correct": false,
+      "errors": [
+        "Asset Impact Agent: Missing required keys: impacted_assets, tenant_scope, blast_radius, operational_risk, asset_summary"
+      ]
+    },
+    {
+      "id": "triage-pos-004",
+      "expected_ai": true,
+      "predicted_ai": true,
+      "triage_correct": true,
+      "confidence": 0.84,
+      "extraction_exact": {
+        "vuln_type": false,
+        "severity": true,
+        "affected_component": false
+      },
+      "extraction_completeness": 1.0,
+      "merge_correct": false,
+      "errors": [
+        "Asset Impact Agent: Missing required keys: impacted_assets, tenant_scope, blast_radius, operational_risk, asset_summary"
+      ]
+    },
+    {
+      "id": "triage-pos-005",
+      "expected_ai": true,
+      "predicted_ai": true,
+      "triage_correct": true,
+      "confidence": 0.92,
+      "extraction_exact": {
+        "vuln_type": true,
+        "severity": true,
+        "affected_component": true
+      },
+      "extraction_completeness": 1.0,
+      "merge_correct": true,
+      "errors": [
+        "Asset Impact Agent: Missing required keys: impacted_assets, tenant_scope, blast_radius, operational_risk, asset_summary"
+      ]
+    },
+    {
+      "id": "triage-pos-006",
+      "expected_ai": true,
+      "predicted_ai": true,
+      "triage_correct": true,
+      "confidence": 0.84,
+      "extraction_exact": {
+        "vuln_type": false,
+        "severity": false,
+        "affected_component": false
+      },
+      "extraction_completeness": 1.0,
+      "merge_correct": true,
+      "errors": [
+        "Asset Impact Agent: Missing required keys: impacted_assets, tenant_scope, blast_radius, operational_risk, asset_summary"
+      ]
+    },
+    {
+      "id": "triage-neg-001",
+      "expected_ai": false,
+      "predicted_ai": false,
+      "triage_correct": true,
+      "confidence": 0.12,
+      "extraction_exact": {},
+      "extraction_completeness": null,
+      "merge_correct": null,
+      "errors": []
+    },
+    {
+      "id": "triage-neg-002",
+      "expected_ai": false,
+      "predicted_ai": false,
+      "triage_correct": true,
+      "confidence": 0.12,
+      "extraction_exact": {},
+      "extraction_completeness": null,
+      "merge_correct": null,
+      "errors": []
+    },
+    {
+      "id": "triage-neg-003",
+      "expected_ai": false,
+      "predicted_ai": false,
+      "triage_correct": true,
+      "confidence": 0.12,
+      "extraction_exact": {},
+      "extraction_completeness": null,
+      "merge_correct": null,
+      "errors": []
+    },
+    {
+      "id": "triage-neg-004",
+      "expected_ai": false,
+      "predicted_ai": false,
+      "triage_correct": true,
+      "confidence": 0.12,
+      "extraction_exact": {},
+      "extraction_completeness": null,
+      "merge_correct": null,
+      "errors": []
+    }
+  ]
+}

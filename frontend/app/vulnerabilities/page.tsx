@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
-import { api, Vulnerability } from "@/lib/api";
-import { Card } from "@/components/ui/card";
+
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { api, Vulnerability } from "@/lib/api";
 
 type ListResponse = { items: Vulnerability[]; total: number; page: number; page_size: number };
 
-export default async function VulnerabilitiesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+export default async function VulnerabilitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const sp = await searchParams;
   const query = new URLSearchParams();
   for (const key of ["q", "severity", "vuln_type", "component", "status"]) {
@@ -23,7 +28,10 @@ export default async function VulnerabilitiesPage({ searchParams }: { searchPara
           <p className="text-sm text-slate-500">支持搜索、筛选、详情查看、手动新增和 AI 导入。</p>
         </div>
         <div className="flex gap-2">
-          <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium" href="/vulnerabilities/new">
+          <Link
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium"
+            href="/vulnerabilities/new"
+          >
             <Plus size={16} />
             手动新增
           </Link>
@@ -45,8 +53,18 @@ export default async function VulnerabilitiesPage({ searchParams }: { searchPara
           <option value="中危">中危</option>
           <option value="低危">低危</option>
         </select>
-        <input name="vuln_type" defaultValue={sp.vuln_type ?? ""} className="rounded-md border border-border px-3 text-sm outline-none" placeholder="漏洞类型" />
-        <input name="component" defaultValue={sp.component ?? ""} className="rounded-md border border-border px-3 text-sm outline-none" placeholder="影响组件" />
+        <input
+          name="vuln_type"
+          defaultValue={sp.vuln_type ?? ""}
+          className="rounded-md border border-border px-3 text-sm outline-none"
+          placeholder="漏洞类型"
+        />
+        <input
+          name="component"
+          defaultValue={sp.component ?? ""}
+          className="rounded-md border border-border px-3 text-sm outline-none"
+          placeholder="影响组件"
+        />
         <select name="status" defaultValue={sp.status ?? ""} className="rounded-md border border-border px-3 text-sm">
           <option value="">全部状态</option>
           <option value="未修复">未修复</option>
@@ -72,19 +90,23 @@ export default async function VulnerabilitiesPage({ searchParams }: { searchPara
             </tr>
           </thead>
           <tbody>
-            {data.items.map((v) => (
-              <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted">
+            {data.items.map((vulnerability) => (
+              <tr key={vulnerability.id} className="border-b border-border last:border-0 hover:bg-muted">
                 <td className="p-3 font-medium">
-                  <Link href={`/vulnerabilities/${v.id}`}>{v.title}</Link>
+                  <Link href={`/vulnerabilities/${vulnerability.id}`}>{vulnerability.title}</Link>
                 </td>
-                <td>{v.vuln_type}</td>
-                <td><Badge>{v.severity}</Badge></td>
-                <td>{v.score}</td>
-                <td>{v.affected_component}</td>
-                <td>{v.status}</td>
-                <td>{new Date(v.created_at).toLocaleString()}</td>
+                <td>{vulnerability.vuln_type}</td>
+                <td>
+                  <Badge>{vulnerability.severity}</Badge>
+                </td>
+                <td>{vulnerability.score}</td>
+                <td>{vulnerability.affected_component}</td>
+                <td>{vulnerability.status}</td>
+                <td>{new Date(vulnerability.created_at).toLocaleString()}</td>
                 <td className="pr-3">
-                  <Link className="text-primary hover:underline" href={`/vulnerabilities/${v.id}`}>查看 / 编辑</Link>
+                  <Link className="text-primary hover:underline" href={`/vulnerabilities/${vulnerability.id}`}>
+                    查看 / 编辑
+                  </Link>
                 </td>
               </tr>
             ))}

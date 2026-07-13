@@ -9,15 +9,15 @@ SENSITIVE_TERMS = [
     "token",
     "key",
     "credential",
-    "知识库",
-    "系统提示词",
+    "knowledge",
+    "system prompt",
     "prompt",
 ]
-REMOTE_TERMS = ["远程", "web", "网页", "外部", "retriever", "api", "插件", "plugin", "公开"]
-POC_TERMS = ["poc", "复现", "exploit", "payload", "攻击者可以", "构造"]
-CORE_TERMS = ["agent", "rag", "tool", "plugin", "gateway", "retriever", "document store", "模型网关"]
-FIX_UNKNOWN_TERMS = ["unknown", "暂无", "未提供", "不明确"]
-CRITICAL_TERMS = ["供应链", "supply chain", "ssrf", "system prompt exposure", "authorization bypass", "越权"]
+REMOTE_TERMS = ["remote", "web", "browser", "external", "retriever", "api", "plugin", "public"]
+POC_TERMS = ["poc", "exploit", "payload", "attacker can", "reproduce"]
+CORE_TERMS = ["agent", "rag", "tool", "plugin", "gateway", "retriever", "document store", "model routing"]
+FIX_UNKNOWN_TERMS = ["unknown", "not provided", "unclear", "n/a"]
+CRITICAL_TERMS = ["supply chain", "ssrf", "system prompt exposure", "authorization bypass", "越权"]
 LOW_RISK_TERMS = ["telemetry", "routing", "trace", "debug", "benchmark", "evaluation", "viewer", "render"]
 
 
@@ -41,27 +41,27 @@ def calculate_risk(vuln: VulnerabilityCreate | dict) -> tuple[int, str, list[str
     score = SEVERITY_BASE.get(str(data.get("severity", "中危")), 25)
     factors = [f"基础等级 {data.get('severity', '中危')}"]
 
-    if any(term.lower() in text for term in REMOTE_TERMS):
+    if any(term in text for term in REMOTE_TERMS):
         score += 15
         factors.append("存在外部输入、网页、API 或插件链路入口")
-    if any(term.lower() in text for term in SENSITIVE_TERMS):
+    if any(term in text for term in SENSITIVE_TERMS):
         score += 15
         factors.append("涉及提示词、知识库、密钥或敏感数据暴露")
-    if any(term.lower() in text for term in POC_TERMS):
+    if any(term in text for term in POC_TERMS):
         score += 10
         factors.append("存在可复现攻击方式或 payload 线索")
-    if any(term.lower() in text for term in CORE_TERMS):
+    if any(term in text for term in CORE_TERMS):
         score += 10
-        factors.append("影响 Agent、RAG、工具或模型网关等关键组件")
-    if any(term.lower() in text for term in CRITICAL_TERMS):
+        factors.append("影响 Agent、RAG、工具调用或模型网关等关键组件")
+    if any(term in text for term in CRITICAL_TERMS):
         score += 15
-        factors.append("命中高破坏性关键词，具有跨边界或供应链风险")
-    if any(term.lower() in text for term in LOW_RISK_TERMS):
+        factors.append("命中高破坏性关键字，存在越权或供应链风险")
+    if any(term in text for term in LOW_RISK_TERMS):
         score -= 10
-        factors.append("更偏观测、调试或配置侧问题，直接利用面较弱")
+        factors.append("更偏向调试、观测或配置侧问题，直接利用面较弱")
 
     mitigation = str(data.get("mitigation", "")).lower()
-    if any(term.lower() in mitigation for term in FIX_UNKNOWN_TERMS):
+    if any(term in mitigation for term in FIX_UNKNOWN_TERMS):
         score += 10
         factors.append("修复方案不明确")
     elif len(mitigation) > 15:
@@ -74,4 +74,4 @@ def calculate_risk(vuln: VulnerabilityCreate | dict) -> tuple[int, str, list[str
 
 def explain_risk(score: int, severity: str, factors: list[str]) -> str:
     joined = "；".join(factors)
-    return f"规则评分为 {score} 分，映射为 {severity}。主要依据：{joined}。建议优先检查输入边界、权限控制、日志审计和修复方案可执行性。"
+    return f"规则评分为 {score} 分，对应 {severity}。主要依据：{joined}。建议优先检查输入边界、权限控制、日志审计与修复可执行性。"

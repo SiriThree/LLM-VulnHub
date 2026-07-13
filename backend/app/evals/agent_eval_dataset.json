@@ -1,0 +1,96 @@
+[
+  {
+    "id": "triage-pos-001",
+    "raw_text": "A LangChain agent accepts untrusted browser tool output and injects it into the next model turn without instruction boundary isolation. An attacker can hide malicious instructions in a web page to trigger unauthorized tool calls and leak the system prompt.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Prompt Injection",
+      "severity": "高危",
+      "affected_component": "LLM Agent / Tool Calling",
+      "merge_should_merge": true
+    }
+  },
+  {
+    "id": "triage-pos-002",
+    "raw_text": "A RAG retriever performs semantic search before applying per-user ACL filters, allowing a low-privilege user to recover protected document chunks from another tenant knowledge base.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "RAG Data Leakage",
+      "severity": "高危",
+      "affected_component": "RAG Retriever / Document Store",
+      "merge_should_merge": true
+    }
+  },
+  {
+    "id": "triage-pos-003",
+    "raw_text": "A plugin permission broker loads third-party manifest updates without signature verification, expanding tool scopes and enabling remote exfiltration from the LLM application runtime.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Plugin Supply Chain Risk",
+      "severity": "严重",
+      "affected_component": "Plugin Permission Broker",
+      "merge_should_merge": true
+    }
+  },
+  {
+    "id": "triage-pos-004",
+    "raw_text": "An evaluation artifact pipeline exports benchmark prompts and model traces into a shared bundle. Internal prompt templates and private evaluation content can be exposed outside the intended review workflow.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Training / Evaluation Data Exposure",
+      "severity": "中危",
+      "affected_component": "Evaluation Artifact Pipeline",
+      "merge_should_merge": true
+    }
+  },
+  {
+    "id": "triage-pos-005",
+    "raw_text": "An agent planner treats a side-effecting action as safe and skips approval, allowing a user to invoke privileged tools on behalf of another account.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Agent Authorization Bypass",
+      "severity": "严重",
+      "affected_component": "LLM Agent / Tool Calling",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-006",
+    "raw_text": "A model routing layer sends sensitive enterprise prompts to a lower-trust fallback model because of a misconfigured policy branch. Debug traces reveal non-public prompt fragments to support operators.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Model Routing Misconfiguration",
+      "severity": "低危",
+      "affected_component": "LLM Application",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-neg-001",
+    "raw_text": "LangChain released a new patch version with improved developer ergonomics, faster tracing, and better tutorial examples for local development.",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  },
+  {
+    "id": "triage-neg-002",
+    "raw_text": "This blog post compares GPU training throughput across several transformer configurations and summarizes benchmark results for inference latency.",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  },
+  {
+    "id": "triage-neg-003",
+    "raw_text": "A product update adds a new dashboard for prompt analytics and team collaboration features. No security issue or unauthorized access is described.",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  },
+  {
+    "id": "triage-neg-004",
+    "raw_text": "The research note explains retrieval augmentation concepts and how embeddings improve answer quality in question answering systems. It does not describe any exploit or bypass.",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  }
+]

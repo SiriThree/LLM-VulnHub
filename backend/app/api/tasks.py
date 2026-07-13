@@ -2,10 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.security import RequestIdentity, require_role
 from app.db.models import Task
 from app.db.session import get_db
 from app.schemas.task import TaskListResponse, TaskRead
-from app.services.collector_service import dispatch_collection_task
+from app.services.collector_service import (
+    dispatch_analysis_task,
+    dispatch_collection_task,
+    dispatch_notification_task,
+    dispatch_review_task,
+)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -25,7 +31,11 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{task_id}/retry", response_model=TaskRead)
-def retry_task(task_id: int, db: Session = Depends(get_db)):
+def retry_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "task not found")
@@ -34,6 +44,9 @@ def retry_task(task_id: int, db: Session = Depends(get_db)):
     task.error_message = None
     task.output_data = {
         **(task.output_data or {}),
+        "dead_letter": False,
+        "dead_letter_reason": None,
+        "dead_letter_at": None,
         "execution_mode": "pending",
         "queue_task_id": None,
         "current_stage": "queued",
@@ -57,5 +70,11 @@ def retry_task(task_id: int, db: Session = Depends(get_db)):
 
     if task.task_type == "crawl":
         dispatch_collection_task(task.id)
+    elif task.task_type == "analyze_document":
+        dispatch_analysis_task(task.id)
+    elif task.task_type == "review_helper":
+        dispatch_review_task(task.id)
+    elif task.task_type == "notification":
+        dispatch_notification_task(task.id)
 
     return task

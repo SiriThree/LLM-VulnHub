@@ -18,6 +18,55 @@ class RelevanceResult(BaseModel):
 class ExtractResult(VulnerabilityCreate):
     risk_reason: str = ""
     similar: list[VulnerabilityRead] = []
+    review_summary: str = ""
+    asset_impact_summary: str = ""
+    asset_impact_details: dict = {}
+
+
+class AgentExecutionRead(BaseModel):
+    id: int
+    agent_name: str
+    stage_name: str
+    status: str
+    provider_name: str | None = None
+    model_name: str | None = None
+    prompt_version: str
+    retry_count: int = 1
+    latency_ms: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    input_payload: dict = {}
+    output_payload: dict = {}
+    error_message: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class AnalysisJobRead(BaseModel):
+    id: int
+    pipeline_name: str
+    pipeline_version: str
+    status: str
+    source_url: str | None = None
+    raw_text_hash: str
+    raw_text_excerpt: str
+    provider_name: str | None = None
+    model_name: str | None = None
+    relevance: dict = {}
+    extracted_fields: dict = {}
+    similar_snapshot: list[dict] = []
+    asset_impact_summary: str = ""
+    asset_impact_details: dict = {}
+    score: int | None = None
+    severity: str | None = None
+    risk_reason: str = ""
+    review_summary: str = ""
+    report: str = ""
+    error_message: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    agent_executions: list[AgentExecutionRead] = []
 
 
 class AnalyzeRequest(ExtractRequest):
@@ -29,6 +78,7 @@ class AnalyzeResult(BaseModel):
     extracted: ExtractResult
     vulnerability: VulnerabilityRead | None = None
     report: str
+    analysis_job: AnalysisJobRead | None = None
 
 
 class ScoreRequest(BaseModel):

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.security import RequestIdentity, require_role
 from app.db.models import DataSource
 from app.db.session import get_db
 from app.schemas.collector import DataSourceCreate, DataSourceRead, DataSourceUpdate
@@ -16,12 +17,21 @@ def list_sources(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=DataSourceRead)
-def create_source_api(payload: DataSourceCreate, db: Session = Depends(get_db)):
+def create_source_api(
+    payload: DataSourceCreate,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("admin")),
+):
     return create_source(db, payload)
 
 
 @router.put("/{source_id}", response_model=DataSourceRead)
-def update_source_api(source_id: int, payload: DataSourceUpdate, db: Session = Depends(get_db)):
+def update_source_api(
+    source_id: int,
+    payload: DataSourceUpdate,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("admin")),
+):
     source = update_source(db, source_id, payload)
     if not source:
         raise HTTPException(404, "source not found")
@@ -29,7 +39,11 @@ def update_source_api(source_id: int, payload: DataSourceUpdate, db: Session = D
 
 
 @router.delete("/{source_id}")
-def delete_source_api(source_id: int, db: Session = Depends(get_db)):
+def delete_source_api(
+    source_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("admin")),
+):
     source = db.get(DataSource, source_id)
     if not source:
         raise HTTPException(404, "source not found")

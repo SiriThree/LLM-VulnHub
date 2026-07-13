@@ -8,8 +8,47 @@ import httpx
 from app.core.config import get_settings
 
 
-AI_KEYWORDS = ["llm", "大模型", "prompt", "rag", "agent", "插件", "plugin", "embedding", "模型", "知识库", "langchain", "llamaindex"]
-VULN_KEYWORDS = ["漏洞", "泄露", "越权", "注入", "攻击", "绕过", "未授权", "bypass", "injection", "leak", "exploit"]
+AI_KEYWORDS = [
+    "llm",
+    "大模型",
+    "prompt",
+    "rag",
+    "agent",
+    "插件",
+    "plugin",
+    "embedding",
+    "模型",
+    "知识库",
+    "langchain",
+    "llamaindex",
+    "retriever",
+    "tool",
+    "browser",
+    "routing",
+    "evaluation",
+]
+VULN_KEYWORDS = [
+    "漏洞",
+    "泄露",
+    "越权",
+    "注入",
+    "攻击",
+    "绕过",
+    "未授权",
+    "bypass",
+    "injection",
+    "leak",
+    "exploit",
+    "exfiltration",
+    "permission",
+    "acl",
+    "scope",
+    "unauthorized",
+    "privileged",
+    "tenant",
+    "manifest",
+    "exposure",
+]
 SECURITY_PATTERNS = [
     "untrusted",
     "unauthorized",
@@ -25,7 +64,18 @@ SECURITY_PATTERNS = [
     "data exposure",
     "malicious input",
 ]
-NEGATIVE_PATTERNS = ["没有安全漏洞", "无安全漏洞", "没有漏洞", "未提及漏洞", "不涉及漏洞", "只是普通新闻", "产品介绍"]
+NEGATIVE_PATTERNS = [
+    "没有安全漏洞",
+    "无安全漏洞",
+    "没有漏洞",
+    "未提及漏洞",
+    "不涉及漏洞",
+    "只是普通新闻",
+    "产品介绍",
+    "no security issue",
+    "does not describe any exploit",
+    "does not describe any exploit or bypass",
+]
 
 
 class LLMProviderError(RuntimeError):
@@ -135,33 +185,79 @@ class LLMClient:
                 return json.loads(match.group(0))
             raise LLMProviderError("Model returned invalid JSON content.")
 
-    def _extract_candidate_text(self, prompt: str, marker: str) -> str:
-        if marker in prompt:
-            return prompt.split(marker, 1)[1].strip()
+    def _candidate_text(self, prompt: str) -> str:
+        for marker in ("Candidate text:", "Vulnerability text:", "漏洞文本：", "漏洞描述："):
+            if marker in prompt:
+                return prompt.split(marker, 1)[1].strip()
         return prompt.strip()
 
     def _mock_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        prompt_lower = user_prompt.lower()
+        text = self._candidate_text(user_prompt).lower()
+
         if "is_ai_vulnerability" in user_prompt:
-            text = self._extract_candidate_text(user_prompt, "候选文本：").lower()
             has_negative = any(pattern in text for pattern in NEGATIVE_PATTERNS)
             ai_hit = any(keyword in text for keyword in AI_KEYWORDS)
             vuln_hit = any(keyword in text for keyword in VULN_KEYWORDS)
             security_hit = any(pattern in text for pattern in SECURITY_PATTERNS)
-            hit = (not has_negative) and ai_hit and (vuln_hit or security_hit)
+            strong_context_hit = any(
+                phrase in text
+                for phrase in [
+                    "permission broker",
+                    "knowledge base",
+                    "evaluation artifact",
+                    "support operators",
+                    "per-user acl",
+                    "third-party manifest",
+                    "privileged tools",
+                    "fallback model",
+                    "debug traces",
+                ]
+            )
+            hit = (not has_negative) and ai_hit and (vuln_hit or security_hit or strong_context_hit)
             if "prompt" in text or "注入" in text:
                 area = "Prompt Injection"
-            elif "rag" in text or "知识库" in text:
+            elif "rag" in text or "knowledge" in text or "知识库" in text:
                 area = "RAG Data Leakage"
+            elif "tool" in text or "browser" in text or "agent" in text:
+                area = "Agent / Tool Abuse"
+            elif "evaluation" in text or "trace" in text or "artifact" in text:
+                area = "Training / Evaluation Data Exposure"
+            elif "routing" in text or "fallback model" in text:
+                area = "Model Routing Misconfiguration"
             else:
-                area = "Agent / LLM Security"
+                area = "LLM Application Security"
             return {
                 "is_ai_vulnerability": hit,
-                "confidence": 0.9 if vuln_hit and hit else 0.78 if security_hit and hit else 0.15,
+                "confidence": 0.92 if vuln_hit and hit else 0.84 if (security_hit or strong_context_hit) and hit else 0.12,
                 "related_area": area if hit else "unknown",
-                "reason": "关键词和语义线索显示该文本与 AI 应用安全风险相关。" if hit else "文本中未发现明确的 AI 漏洞语义线索。",
+                "reason": "The text contains AI-system context together with security-impact vocabulary." if hit else "The text does not clearly describe an AI-related vulnerability.",
             }
 
-        text = self._extract_candidate_text(user_prompt, "漏洞描述：").lower()
+        if "risk_reason" in user_prompt and "priority" in user_prompt:
+            severity = "严重" if "严重" in user_prompt else "高危" if "高危" in user_prompt else "中危"
+            return {
+                "risk_reason": f"该漏洞影响 AI 工作流中的关键执行链路，可能导致提示词泄露、未授权工具调用或敏感数据外泄，综合判断为{severity}。",
+                "priority": "P1" if severity in {"严重", "高危"} else "P2",
+                "analyst_notes": "优先验证外部输入边界、工具调用授权和输出隔离策略。",
+            }
+
+        if "publishable" in user_prompt and "review_status" in user_prompt:
+            return {
+                "publishable": False,
+                "review_status": "needs_review",
+                "review_summary": "结构化字段已经具备，但仍建议人工确认攻击前提、影响边界和修复建议后再发布。",
+                "missing_fields": [],
+            }
+
+        if "candidate_ids" in user_prompt or "should_merge" in user_prompt:
+            ids = [int(match) for match in re.findall(r"ID:\s*(\d+)", user_prompt)]
+            return {
+                "should_merge": False,
+                "candidate_ids": ids[:1] if ids and "same vulnerability" in prompt_lower else [],
+                "reason": "The candidate appears related, but should remain manual-review unless the exploit path and affected component fully match.",
+                "confidence": 0.45 if ids else 0.0,
+            }
 
         if "supply chain" in text or "供应链" in text or "ssrf" in text:
             vuln_type = "Plugin Supply Chain Risk"
@@ -171,7 +267,7 @@ class LLMClient:
             vuln_type = "Prompt Injection"
             severity = "高危"
             component = "LLM Agent / Tool Calling"
-        elif "rag" in text or "知识库" in text:
+        elif "rag" in text or "知识库" in text or "retriever" in text:
             vuln_type = "RAG Data Leakage"
             severity = "高危"
             component = "RAG Retriever / Document Store"
@@ -183,28 +279,29 @@ class LLMClient:
             vuln_type = "Training / Evaluation Data Exposure"
             severity = "中危"
             component = "Evaluation Artifact Pipeline"
-        elif "agent" in text or "工具" in text:
-            vuln_type = "Agent 越权"
+        elif "agent" in text or "tool" in text or "browser" in text:
+            vuln_type = "Agent Authorization Bypass"
             severity = "严重"
             component = "LLM Agent / Tool Calling"
         else:
-            vuln_type = "LLM 应用安全风险"
+            vuln_type = "LLM Application Security Risk"
             severity = "中危"
             component = "LLM Application"
 
+        title = f"{component} {vuln_type} Vulnerability"
         return {
-            "title": f"{component} {vuln_type} 漏洞",
+            "title": title,
             "vuln_type": vuln_type,
             "severity": severity,
             "affected_component": component,
             "description": text[:240] if text else "unknown",
-            "attack_method": "攻击者通过构造恶意输入、外部文档或工具返回内容影响模型行为。",
-            "impact": "可能造成系统提示词泄露、知识库越权访问、敏感数据暴露或未授权工具调用。",
-            "mitigation": "隔离外部内容与指令，增加权限校验、检索过滤、工具调用审计和输出安全策略。",
-            "tags": [vuln_type, component.split("/")[0].strip()],
+            "attack_method": "The attacker injects malicious content through prompts, external documents, web pages, or tool output to manipulate model behavior.",
+            "impact": "This may lead to prompt leakage, unauthorized tool execution, cross-tenant data access, or sensitive knowledge-base exposure.",
+            "mitigation": "Isolate instructions from external content, enforce tool authorization, add retrieval filtering, and audit model outputs before action.",
+            "tags": [vuln_type, component.split('/')[0].strip()],
         }
 
     def _mock_text(self, prompt: str) -> str:
-        if "漏洞库上下文" in prompt:
-            return "根据漏洞库上下文，相关风险主要集中在外部输入进入 Prompt、RAG 检索权限不足、Agent 工具调用缺少边界控制。建议采用指令隔离、最小权限、检索权限过滤、工具调用审批和日志审计。"
+        if "漏洞库上下文" in prompt or "context" in prompt.lower():
+            return "根据漏洞库上下文，风险主要集中在外部输入进入 Prompt、RAG 检索权限不足，以及 Agent 工具调用缺少边界控制。建议采用指令隔离、最小权限、检索过滤和工具审计。"
         return "该漏洞需要优先关注攻击入口、影响范围、敏感数据暴露和修复可行性，并在上线前补充权限校验与审计。"

@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "LLM-VulnHub",
-  description: "AI 大模型漏洞库管理与智能分析平台",
+  description: "AI 大模型漏洞管理与智能分析平台",
 };
 
 export default function RootLayout({

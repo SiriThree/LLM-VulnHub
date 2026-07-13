@@ -1,10 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import Vulnerability
+from app.core.security import RequestIdentity, require_role
+from app.db.models import Vulnerability, VulnerabilityOccurrence
 from app.db.session import get_db
-from app.schemas.vulnerability import DashboardStats, VulnerabilityCreate, VulnerabilityList, VulnerabilityRead, VulnerabilityUpdate
-from app.services.vulnerability_service import create_vulnerability, dashboard_stats, list_vulnerabilities, serialize_vulnerability, update_vulnerability
+from app.schemas.vulnerability import (
+    DashboardStats,
+    VulnerabilityCreate,
+    VulnerabilityDetailRead,
+    VulnerabilityList,
+    VulnerabilityRead,
+    VulnerabilityUpdate,
+)
+from app.services.vulnerability_service import (
+    create_vulnerability,
+    dashboard_stats,
+    list_vulnerabilities,
+    serialize_vulnerability,
+    serialize_vulnerability_detail,
+    update_vulnerability,
+)
 
 router = APIRouter(prefix="/vulnerabilities", tags=["vulnerabilities"])
 
@@ -29,21 +44,39 @@ def dashboard_api(db: Session = Depends(get_db)):
     return dashboard_stats(db)
 
 
-@router.get("/{vuln_id}", response_model=VulnerabilityRead)
+@router.get("/{vuln_id}", response_model=VulnerabilityDetailRead)
 def get_api(vuln_id: int, db: Session = Depends(get_db)):
-    vuln = db.query(Vulnerability).options(selectinload(Vulnerability.tags)).filter(Vulnerability.id == vuln_id).first()
+    vuln = (
+        db.query(Vulnerability)
+        .options(
+            selectinload(Vulnerability.tags),
+            selectinload(Vulnerability.occurrences).selectinload(VulnerabilityOccurrence.intelligence_item),
+            selectinload(Vulnerability.analyses),
+        )
+        .filter(Vulnerability.id == vuln_id)
+        .first()
+    )
     if not vuln:
         raise HTTPException(404, "vulnerability not found")
-    return serialize_vulnerability(vuln)
+    return serialize_vulnerability_detail(vuln)
 
 
 @router.post("", response_model=VulnerabilityRead)
-def create_api(payload: VulnerabilityCreate, db: Session = Depends(get_db)):
+def create_api(
+    payload: VulnerabilityCreate,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     return serialize_vulnerability(create_vulnerability(db, payload))
 
 
 @router.put("/{vuln_id}", response_model=VulnerabilityRead)
-def update_api(vuln_id: int, payload: VulnerabilityUpdate, db: Session = Depends(get_db)):
+def update_api(
+    vuln_id: int,
+    payload: VulnerabilityUpdate,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     vuln = update_vulnerability(db, vuln_id, payload)
     if not vuln:
         raise HTTPException(404, "vulnerability not found")
@@ -51,7 +84,11 @@ def update_api(vuln_id: int, payload: VulnerabilityUpdate, db: Session = Depends
 
 
 @router.delete("/{vuln_id}")
-def delete_api(vuln_id: int, db: Session = Depends(get_db)):
+def delete_api(
+    vuln_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("admin")),
+):
     vuln = db.get(Vulnerability, vuln_id)
     if not vuln:
         raise HTTPException(404, "vulnerability not found")

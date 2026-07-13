@@ -21,9 +21,12 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
     llm_timeout_seconds: int = 45
     llm_max_retries: int = 2
+    agent_max_attempts: int = 2
     llm_temperature: float = 0.1
     llm_fallback_to_mock: bool = True
     github_token: str | None = None
+    default_actor: str = "local-admin"
+    default_role: str = "admin"
 
     embedding_dim: int = 64
     duplicate_similarity_threshold: float = 0.88

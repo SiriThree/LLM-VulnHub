@@ -5,18 +5,23 @@ import { RefreshCw, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { api, TaskListResponse, TaskRecord } from "@/lib/api";
+import { api, DeadLetterTask, TaskListResponse, TaskRecord } from "@/lib/api";
 
 const STAGE_LABELS: Record<string, string> = {
   queued: "排队中",
   fetching: "抓取源内容",
   parsing: "解析候选内容",
+  ingesting: "原始入池",
+  queued_analysis: "等待分析",
+  analyzing: "AI 分析",
   filtering: "AI 相关性筛选",
   extracting: "结构化抽取",
   deduplicating: "相似去重",
-  reviewing: "待人工复核",
+  reviewing: "审核辅助",
+  notifying: "发送通知",
   storing: "标准化入库",
   completed: "完成",
+  failed: "失败",
 };
 
 function StageBadge({ value }: { value?: string }) {
@@ -31,10 +36,10 @@ function MetricCards({ task }: { task: TaskRecord }) {
   const items = [
     ["发现候选", metrics.discovered],
     ["已处理", metrics.processed],
-    ["已入库", metrics.saved],
-    ["待复核", metrics.pending_review],
+    ["等待分析", metrics.queued_analysis],
+    ["等待复核", metrics.queued_review],
+    ["通知", metrics.notifications],
     ["重复跳过", metrics.duplicates],
-    ["忽略", metrics.ignored],
   ];
 
   return (
@@ -51,13 +56,18 @@ function MetricCards({ task }: { task: TaskRecord }) {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [deadLetters, setDeadLetters] = useState<DeadLetterTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
   async function load() {
     try {
-      const res = await api<TaskListResponse>("/tasks");
-      setTasks(res.items);
+      const [taskRes, deadLetterRes] = await Promise.all([
+        api<TaskListResponse>("/tasks"),
+        api<DeadLetterTask[]>("/ops/dead-letter"),
+      ]);
+      setTasks(taskRes.items);
+      setDeadLetters(deadLetterRes);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "加载任务失败。");
     } finally {
@@ -82,19 +92,25 @@ export default function TasksPage() {
     }
   }
 
-  const activeCount = useMemo(
-    () => tasks.filter((task) => task.status === "queued" || task.status === "running").length,
-    [tasks],
-  );
+  async function requeueDeadLetter(taskId: number) {
+    setMessage("");
+    try {
+      await api(`/ops/dead-letter/${taskId}/requeue`, { method: "POST" });
+      setMessage(`死信任务 #${taskId} 已重新入队。`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "死信任务恢复失败。");
+    }
+  }
+
+  const activeCount = useMemo(() => tasks.filter((task) => task.status === "queued" || task.status === "running").length, [tasks]);
 
   return (
     <div className="space-y-5">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold">任务中心</h1>
-          <p className="text-sm text-slate-500">
-            观察采集任务从排队、抓取、筛选、抽取、去重到审核入库的完整流水线。
-          </p>
+          <p className="text-sm text-slate-500">统一观察 ingestion、analysis、review、notification 四段异步流水线。</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-500">活跃任务 {activeCount}</span>
@@ -107,6 +123,37 @@ export default function TasksPage() {
 
       {message ? <div className="rounded-md border border-border bg-white p-3 text-sm">{message}</div> : null}
 
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Dead Letter Queue</h2>
+            <p className="text-sm text-slate-500">已达到最大重试次数的任务会停留在这里，等待人工排障与恢复。</p>
+          </div>
+          <div className="text-sm text-slate-500">当前 {deadLetters.length} 条</div>
+        </div>
+
+        <div className="space-y-3">
+          {deadLetters.map((item) => (
+            <div key={item.id} className="rounded-md border border-border bg-slate-50 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium">任务 #{item.id} · {item.task_type}</div>
+                  <div className="mt-1 text-sm text-slate-600">{item.dead_letter_reason || item.error_message || "No reason recorded."}</div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    尝试 {item.attempt_count}/{item.max_attempts} · 阶段 {item.current_stage || "-"} · 队列 {item.queue_name || "-"} · 更新时间 {new Date(item.updated_at).toLocaleString()}
+                  </div>
+                </div>
+                <Button type="button" onClick={() => requeueDeadLetter(item.id)}>
+                  <RotateCcw size={16} />
+                  重新入队
+                </Button>
+              </div>
+            </div>
+          ))}
+          {deadLetters.length === 0 ? <div className="text-sm text-slate-500">当前没有死信任务。</div> : null}
+        </div>
+      </Card>
+
       <div className="space-y-4">
         {tasks.map((task) => (
           <Card key={task.id} className="space-y-4">
@@ -114,25 +161,18 @@ export default function TasksPage() {
               <div>
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-semibold">任务 #{task.id}</h2>
-                  <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-                    {task.task_type}
-                  </span>
-                  <span className="rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                    {task.status}
-                  </span>
+                  <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{task.task_type}</span>
+                  <span className="rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary">{task.status}</span>
                   <StageBadge value={task.output_data.current_stage} />
+                  {task.output_data.dead_letter ? <span className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700">dead-letter</span> : null}
                 </div>
                 <p className="mt-2 text-sm text-slate-500">{task.output_data.last_message ?? "暂无消息"}</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  创建时间 {new Date(task.created_at).toLocaleString()} · 更新时间{" "}
-                  {new Date(task.updated_at).toLocaleString()}
+                  创建时间 {new Date(task.created_at).toLocaleString()} · 更新时间 {new Date(task.updated_at).toLocaleString()}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
-                  执行模式 {task.output_data.execution_mode ?? "pending"} · 尝试次数{" "}
-                  {task.output_data.attempt_count ?? 0}/{task.output_data.max_attempts ?? 0}
-                  {task.output_data.elapsed_seconds != null
-                    ? ` · 耗时 ${task.output_data.elapsed_seconds}s`
-                    : ""}
+                  执行模式 {task.output_data.execution_mode ?? "pending"} · 尝试次数 {task.output_data.attempt_count ?? 0}/{task.output_data.max_attempts ?? 0}
+                  {task.output_data.elapsed_seconds != null ? ` · 耗时 ${task.output_data.elapsed_seconds}s` : ""}
                 </p>
               </div>
               {task.status === "failed" ? (
@@ -179,14 +219,12 @@ export default function TasksPage() {
                       <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-600">
                         <div>发现 {run.discovered}</div>
                         <div>处理 {run.processed}</div>
-                        <div>入库 {run.saved}</div>
+                        <div>待分析 {run.queued_analysis ?? 0}</div>
                         <div>待复核 {run.pending_review}</div>
                         <div>重复 {run.duplicates}</div>
                         <div>忽略 {run.ignored}</div>
                       </div>
-                      {run.elapsed_seconds != null ? (
-                        <div className="mt-2 text-xs text-slate-500">源耗时 {run.elapsed_seconds}s</div>
-                      ) : null}
+                      {run.elapsed_seconds != null ? <div className="mt-2 text-xs text-slate-500">源耗时 {run.elapsed_seconds}s</div> : null}
                       {run.error ? <div className="mt-2 text-xs text-danger">{run.error}</div> : null}
                     </div>
                   ))}
@@ -194,11 +232,7 @@ export default function TasksPage() {
               </div>
             </div>
 
-            {task.error_message ? (
-              <div className="rounded-md border border-danger/30 bg-red-50 p-3 text-sm text-danger">
-                {task.error_message}
-              </div>
-            ) : null}
+            {task.error_message ? <div className="rounded-md border border-danger/30 bg-red-50 p-3 text-sm text-danger">{task.error_message}</div> : null}
           </Card>
         ))}
       </div>
