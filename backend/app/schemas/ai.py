@@ -21,6 +21,7 @@ class ExtractResult(VulnerabilityCreate):
     review_summary: str = ""
     asset_impact_summary: str = ""
     asset_impact_details: dict = {}
+    merge_suggestions: dict = {}
 
 
 class AgentExecutionRead(BaseModel):
@@ -100,3 +101,61 @@ class ReportRequest(BaseModel):
 
 class ReportResult(BaseModel):
     report: str
+
+
+class ProviderStatusRead(BaseModel):
+    configured_provider: str
+    active_provider: str
+    model: str
+    has_api_key: bool
+    fallback_enabled: bool
+    using_mock: bool
+    can_call_remote: bool
+
+
+class EvalSampleRead(BaseModel):
+    id: str
+    expected_ai: bool
+    predicted_ai: bool | None = None
+    triage_correct: bool | None = None
+    confidence: float | None = None
+    extraction_exact: dict[str, bool] = {}
+    extraction_completeness: float | None = None
+    merge_correct: bool | None = None
+    errors: list[str] = []
+
+
+class EvalDatasetRead(BaseModel):
+    dataset_size: int
+    positive_samples: int
+    negative_samples: int
+    categories: dict[str, int]
+    samples: list[dict]
+
+
+class EvalRunRead(BaseModel):
+    file_name: str
+    provider: str
+    dataset_size: int
+    triage_accuracy: float
+    triage_precision: float
+    triage_recall: float
+    extraction_completeness: float
+    merge_precision: float
+    generated_at: str
+
+
+class EvalRunDetailRead(EvalRunRead):
+    summary: dict = {}
+    samples: list[EvalSampleRead] = []
+
+
+class ConfirmAnalysisRequest(BaseModel):
+    analysis_job_id: int
+    vulnerability: VulnerabilityCreate
+    review_note: str | None = None
+
+
+class ConfirmAnalysisResult(BaseModel):
+    vulnerability: VulnerabilityRead
+    analysis_job: AnalysisJobRead

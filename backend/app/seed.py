@@ -122,21 +122,27 @@ GENERATED_COMPONENTS = [
 
 DEFAULT_SOURCES = [
     {
-        "name": "本地演示数据源",
-        "source_type": "local_file",
-        "url": "../data/sample_sources.json",
-        "interval_minutes": 5,
-    },
-    {
         "name": "GitHub Global Advisories - pip",
         "source_type": "github",
         "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&per_page=30",
         "interval_minutes": 180,
     },
     {
+        "name": "GitHub Global Advisories - npm",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=npm&per_page=30",
+        "interval_minutes": 180,
+    },
+    {
         "name": "LangChain Releases Atom",
         "source_type": "rss",
         "url": "https://github.com/langchain-ai/langchain/releases.atom",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "LangGraph Releases Atom",
+        "source_type": "rss",
+        "url": "https://github.com/langchain-ai/langgraph/releases.atom",
         "interval_minutes": 180,
     },
     {
@@ -150,6 +156,48 @@ DEFAULT_SOURCES = [
         "source_type": "rss",
         "url": "https://github.com/huggingface/transformers/releases.atom",
         "interval_minutes": 180,
+    },
+    {
+        "name": "AutoGen Releases Atom",
+        "source_type": "rss",
+        "url": "https://github.com/microsoft/autogen/releases.atom",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "CrewAI Releases Atom",
+        "source_type": "rss",
+        "url": "https://github.com/crewAIInc/crewAI/releases.atom",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "Haystack Releases Atom",
+        "source_type": "rss",
+        "url": "https://github.com/deepset-ai/haystack/releases.atom",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "OpenAI Security News",
+        "source_type": "web",
+        "url": "https://openai.com/news/security/",
+        "interval_minutes": 240,
+    },
+    {
+        "name": "OpenAI News RSS",
+        "source_type": "rss",
+        "url": "https://openai.com/news/rss.xml",
+        "interval_minutes": 240,
+    },
+    {
+        "name": "Anthropic News",
+        "source_type": "web",
+        "url": "https://www.anthropic.com/news",
+        "interval_minutes": 240,
+    },
+    {
+        "name": "Hugging Face Blog Feed",
+        "source_type": "rss",
+        "url": "https://huggingface.co/blog/feed.xml",
+        "interval_minutes": 240,
     },
 ]
 
@@ -220,6 +268,17 @@ def seed_vulnerabilities() -> None:
 def seed_sources() -> None:
     db = SessionLocal()
     try:
+        demo_sources = db.scalars(
+            select(DataSource).where(
+                DataSource.source_type == "local_file",
+                DataSource.url.in_(["../data/sample_sources.json", "data/sample_sources.json"]),
+            )
+        ).all()
+        for source in demo_sources:
+            db.delete(source)
+        if demo_sources:
+            db.commit()
+
         for source in DEFAULT_SOURCES:
             exists = db.scalar(select(DataSource).where(DataSource.url == source["url"]))
             if exists:

@@ -5,11 +5,12 @@ from sqlalchemy.orm import Session
 from app.core.security import RequestIdentity, require_role
 from app.db.models import CollectedDocument
 from app.db.session import get_db
-from app.schemas.collector import CollectedDocumentRead, CollectorRunRequest, CollectorRunResult
+from app.schemas.collector import CollectedDocumentRead, CollectorOverviewRead, CollectorRunRequest, CollectorRunResult
 from app.services.collector_service import (
     approve_document,
     create_collection_task,
     dispatch_collection_task,
+    get_collector_overview,
 )
 
 router = APIRouter(prefix="/collectors", tags=["collectors"])
@@ -33,9 +34,25 @@ def run_api(
     }
 
 
+@router.get("/overview", response_model=CollectorOverviewRead)
+def overview_api(
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("viewer")),
+):
+    return get_collector_overview(db)
+
+
 @router.get("/documents", response_model=list[CollectedDocumentRead])
-def documents_api(db: Session = Depends(get_db)):
-    return db.scalars(select(CollectedDocument).order_by(CollectedDocument.collected_at.desc()).limit(100)).all()
+def documents_api(
+    status: str | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    stmt = select(CollectedDocument)
+    if status:
+        stmt = stmt.where(CollectedDocument.status == status)
+    stmt = stmt.order_by(CollectedDocument.collected_at.desc()).limit(limit)
+    return db.scalars(stmt).all()
 
 
 @router.post("/documents/{doc_id}/approve", response_model=CollectedDocumentRead)

@@ -47,7 +47,7 @@ export default function SettingsPage() {
           </div>
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">运行观测</div>
-            <div className="mt-1 leading-6">进入 Operations 页，查看任务状态、模型调用次数、token 消耗和近 7 天趋势。</div>
+            <div className="mt-1 leading-6">进入 Operations 页，查看任务状态、模型调用次数和 token 消耗。</div>
           </div>
         </div>
       </Card>

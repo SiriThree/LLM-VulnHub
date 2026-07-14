@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class DataSourceBase(BaseModel):
     name: str
-    source_type: str = Field(default="local_file", pattern="^(rss|web|github|local_file)$")
+    source_type: str = Field(default="rss", pattern="^(rss|web|github|local_file)$")
     url: str
     enabled: bool = True
     interval_minutes: int = Field(default=30, ge=1)
@@ -57,3 +57,56 @@ class CollectorRunResult(BaseModel):
     current_stage: str
     queued_at: datetime
     message: str
+
+
+class CollectorRecentRunRead(BaseModel):
+    task_id: int
+    source_id: int | None = None
+    source_name: str
+    source_type: str
+    status: str
+    stage: str
+    discovered: int
+    processed: int
+    queued_analysis: int
+    saved: int
+    duplicates: int
+    pending_review: int
+    ignored: int
+    failed: int
+    started_at: str | None = None
+    finished_at: str | None = None
+    elapsed_seconds: float | None = None
+    error: str | None = None
+
+
+class SourceHealthRead(BaseModel):
+    source_id: int
+    name: str
+    source_type: str
+    enabled: bool
+    interval_minutes: int
+    last_collected_at: datetime | None = None
+    status: str
+    trust_score: int
+    trust_level: str
+    documents_total: int
+    ai_related_documents: int
+    pending_review_documents: int
+    stored_documents: int
+    duplicate_documents: int
+    recent_run_count: int
+    recent_failure_count: int
+    success_rate: float
+    freshness_minutes: int | None = None
+    signals: list[str] = []
+
+
+class CollectorOverviewRead(BaseModel):
+    source_metrics: dict[str, int]
+    document_metrics: dict[str, int]
+    queue_metrics: dict[str, int]
+    source_health: list[SourceHealthRead]
+    recent_runs: list[CollectorRecentRunRead]
+    pending_documents: list[CollectedDocumentRead]
+    recent_documents: list[CollectedDocumentRead]

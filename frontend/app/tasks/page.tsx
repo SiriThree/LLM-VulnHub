@@ -9,15 +9,15 @@ import { api, DeadLetterTask, TaskListResponse, TaskRecord } from "@/lib/api";
 
 const STAGE_LABELS: Record<string, string> = {
   queued: "排队中",
-  fetching: "抓取源内容",
+  fetching: "抓取来源内容",
   parsing: "解析候选内容",
   ingesting: "原始入池",
   queued_analysis: "等待分析",
   analyzing: "AI 分析",
-  filtering: "AI 相关性筛选",
+  filtering: "AI 相关性判断",
   extracting: "结构化抽取",
   deduplicating: "相似去重",
-  reviewing: "审核辅助",
+  reviewing: "审阅辅助",
   notifying: "发送通知",
   storing: "标准化入库",
   completed: "完成",
@@ -127,7 +127,7 @@ export default function TasksPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Dead Letter Queue</h2>
-            <p className="text-sm text-slate-500">已达到最大重试次数的任务会停留在这里，等待人工排障与恢复。</p>
+            <p className="text-sm text-slate-500">达到最大重试次数的任务会停留在这里，等待人工排障与恢复。</p>
           </div>
           <div className="text-sm text-slate-500">当前 {deadLetters.length} 条</div>
         </div>
@@ -202,7 +202,7 @@ export default function TasksPage() {
               </div>
 
               <div className="rounded-md border border-border">
-                <div className="border-b border-border px-4 py-3 text-sm font-semibold">源执行明细</div>
+                <div className="border-b border-border px-4 py-3 text-sm font-semibold">来源执行明细</div>
                 <div className="max-h-72 space-y-3 overflow-auto p-4">
                   {(task.output_data.source_runs ?? []).map((run) => (
                     <div key={run.source_id} className="rounded-md bg-slate-50 p-3">
@@ -224,15 +224,15 @@ export default function TasksPage() {
                         <div>重复 {run.duplicates}</div>
                         <div>忽略 {run.ignored}</div>
                       </div>
-                      {run.elapsed_seconds != null ? <div className="mt-2 text-xs text-slate-500">源耗时 {run.elapsed_seconds}s</div> : null}
-                      {run.error ? <div className="mt-2 text-xs text-danger">{run.error}</div> : null}
+                      {run.elapsed_seconds != null ? <div className="mt-2 text-xs text-slate-500">来源耗时 {run.elapsed_seconds}s</div> : null}
+                      {run.error ? <div className="mt-2 text-xs text-red-600">{run.error}</div> : null}
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {task.error_message ? <div className="rounded-md border border-danger/30 bg-red-50 p-3 text-sm text-danger">{task.error_message}</div> : null}
+            {task.error_message ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{task.error_message}</div> : null}
           </Card>
         ))}
       </div>

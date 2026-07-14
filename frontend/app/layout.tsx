@@ -18,7 +18,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="bg-background text-foreground antialiased">
         <Nav />
-        <main className="ml-60 min-h-screen px-8 py-6">{children}</main>
+        <main className="ml-64 min-h-screen px-8 py-6">{children}</main>
       </body>
     </html>
   );

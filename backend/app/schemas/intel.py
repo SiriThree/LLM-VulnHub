@@ -16,6 +16,16 @@ class MergeCandidateRead(BaseModel):
     updated_at: datetime
 
 
+class MergeCandidateExplanationRead(MergeCandidateRead):
+    candidate_title: str | None = None
+    candidate_severity: str | None = None
+    candidate_score: int | None = None
+    candidate_component: str | None = None
+    quality: str = "weak"
+    match_signals: list[str] = []
+    review_hint: str = ""
+
+
 class IntelligenceItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,7 +101,9 @@ class ReviewStatsRead(BaseModel):
 
 class IntelligenceStatsRead(BaseModel):
     total: int
+    reviewable: int
     pending_review: int
+    ignored: int
     approved: int
     rejected: int
     triaged: int
@@ -101,3 +113,58 @@ class IntelligenceStatsRead(BaseModel):
 
 class BatchReviewDecisionResponse(BaseModel):
     items: list[IntelligenceItemRead]
+
+
+class LinkedSourceRead(BaseModel):
+    id: int
+    name: str
+    source_type: str
+    url: str
+    enabled: bool
+    interval_minutes: int
+    last_collected_at: datetime | None = None
+    trust_score: int
+    trust_level: str
+    status: str
+    signals: list[str] = []
+
+
+class LinkedCollectedDocumentRead(BaseModel):
+    id: int
+    title: str
+    url: str | None = None
+    status: str
+    is_ai_related: bool
+    confidence: float
+    collected_at: datetime
+    content_hash: str
+
+
+class LinkedVulnerabilitySummaryRead(BaseModel):
+    id: int
+    title: str
+    severity: str
+    score: int
+    status: str
+
+
+class LineageTraceEventRead(BaseModel):
+    stage: str
+    title: str
+    status: str
+    timestamp: datetime | None = None
+    detail: str
+
+
+class IntelligenceLineageRead(BaseModel):
+    intelligence_item_id: int
+    title: str
+    status: str
+    triage_category: str
+    triage_confidence: float
+    source: LinkedSourceRead | None = None
+    collected_document: LinkedCollectedDocumentRead | None = None
+    linked_vulnerability: LinkedVulnerabilitySummaryRead | None = None
+    merge_candidates: list[MergeCandidateExplanationRead] = []
+    review_actions: list[ReviewActionRead] = []
+    trace: list[LineageTraceEventRead] = []

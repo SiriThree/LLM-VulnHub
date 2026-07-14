@@ -21,8 +21,11 @@ PROMPT_REGISTRY: dict[str, PromptSpec] = {
         version="v2",
         system_prompt="You are an AI security triage analyst. Be conservative, avoid invention, and return valid JSON only.",
         user_template=(
-            "Determine whether the text describes an AI or LLM-related security vulnerability. "
-            "Return JSON with keys: is_ai_vulnerability, confidence, related_area, reason.\n\n"
+            "Determine whether the text describes an AI or LLM-related security vulnerability or security advisory. "
+            "Do not classify general AI news, product launches, feature announcements, benchmark posts, tutorials, changelogs, release notes, or enterprise adoption stories as vulnerabilities. "
+            "Only return is_ai_vulnerability=true when the text clearly describes a security weakness, exploit path, unauthorized access, data leakage, prompt injection, advisory, CVE, GHSA, or concrete security impact in an AI/LLM/agent/RAG system. "
+            "Return JSON with keys: is_ai_vulnerability, confidence, related_area, reason. "
+            "confidence must be a number between 0 and 1, not a word like high or medium.\n\n"
             "Candidate text:\n{text}"
         ),
         required_keys=("is_ai_vulnerability", "confidence", "related_area", "reason"),

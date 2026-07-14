@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 llm_vulnhub.db
 *.log
+backend/celerybeat-schedule.*
+backend/artifacts/evals/eval-*.json
 
 node_modules/
 .next/

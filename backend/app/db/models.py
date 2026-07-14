@@ -113,7 +113,7 @@ class DataSource(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(160), index=True)
-    source_type: Mapped[str] = mapped_column(String(40), default="local_file")
+    source_type: Mapped[str] = mapped_column(String(40), default="rss")
     url: Mapped[str] = mapped_column(String(800))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     interval_minutes: Mapped[int] = mapped_column(Integer, default=30)

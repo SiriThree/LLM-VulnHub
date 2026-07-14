@@ -73,6 +73,16 @@ export type MergeCandidate = {
   updated_at: string;
 };
 
+export type MergeCandidateExplanation = MergeCandidate & {
+  candidate_title?: string | null;
+  candidate_severity?: string | null;
+  candidate_score?: number | null;
+  candidate_component?: string | null;
+  quality: string;
+  match_signals: string[];
+  review_hint: string;
+};
+
 export type IntelligenceItem = {
   id: number;
   source_id: number | null;
@@ -102,7 +112,9 @@ export type IntelligenceListResponse = {
 
 export type IntelligenceStats = {
   total: number;
+  reviewable: number;
   pending_review: number;
+  ignored: number;
   approved: number;
   rejected: number;
   triaged: number;
@@ -226,6 +238,35 @@ export type EvalRun = {
   generated_at: string;
 };
 
+export type EvalSample = {
+  id: string;
+  expected_ai: boolean;
+  predicted_ai?: boolean | null;
+  triage_correct?: boolean | null;
+  confidence?: number | null;
+  extraction_exact: Record<string, boolean>;
+  extraction_completeness?: number | null;
+  merge_correct?: boolean | null;
+  errors: string[];
+};
+
+export type EvalDataset = {
+  dataset_size: number;
+  positive_samples: number;
+  negative_samples: number;
+  categories: Record<string, number>;
+  samples: Array<{
+    id: string;
+    raw_text: string;
+    expected: Record<string, unknown>;
+  }>;
+};
+
+export type EvalRunDetail = EvalRun & {
+  summary: Record<string, unknown>;
+  samples: EvalSample[];
+};
+
 export type NotificationEvent = {
   id: number;
   task_status: string;
@@ -313,10 +354,16 @@ export type AnalyzeResult = {
     asset_impact_summary?: string;
     asset_impact_details?: Record<string, unknown>;
     similar?: Vulnerability[];
+    merge_suggestions?: Record<string, unknown>;
   };
   vulnerability?: Vulnerability | null;
   report: string;
   analysis_job?: AnalysisJob | null;
+};
+
+export type ConfirmAnalysisResult = {
+  vulnerability: Vulnerability;
+  analysis_job: AnalysisJob;
 };
 
 export type CollectedDocument = {
@@ -331,6 +378,139 @@ export type CollectedDocument = {
   status: string;
   vulnerability_id?: number | null;
   collected_at: string;
+};
+
+export type CollectorRecentRun = {
+  task_id: number;
+  source_id?: number | null;
+  source_name: string;
+  source_type: string;
+  status: string;
+  stage: string;
+  discovered: number;
+  processed: number;
+  queued_analysis: number;
+  saved: number;
+  duplicates: number;
+  pending_review: number;
+  ignored: number;
+  failed: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  elapsed_seconds?: number | null;
+  error?: string | null;
+};
+
+export type SourceHealth = {
+  source_id: number;
+  name: string;
+  source_type: string;
+  enabled: boolean;
+  interval_minutes: number;
+  last_collected_at?: string | null;
+  status: string;
+  trust_score: number;
+  trust_level: string;
+  documents_total: number;
+  ai_related_documents: number;
+  pending_review_documents: number;
+  stored_documents: number;
+  duplicate_documents: number;
+  recent_run_count: number;
+  recent_failure_count: number;
+  success_rate: number;
+  freshness_minutes?: number | null;
+  signals: string[];
+};
+
+export type CollectorOverview = {
+  source_metrics: Record<string, number>;
+  document_metrics: Record<string, number>;
+  queue_metrics: Record<string, number>;
+  source_health: SourceHealth[];
+  recent_runs: CollectorRecentRun[];
+  pending_documents: CollectedDocument[];
+  recent_documents: CollectedDocument[];
+};
+
+export type IntelligenceLineage = {
+  intelligence_item_id: number;
+  title: string;
+  status: string;
+  triage_category: string;
+  triage_confidence: number;
+  source?: {
+    id: number;
+    name: string;
+    source_type: string;
+    url: string;
+    enabled: boolean;
+    interval_minutes: number;
+    last_collected_at?: string | null;
+    trust_score: number;
+    trust_level: string;
+    status: string;
+    signals: string[];
+  } | null;
+  collected_document?: {
+    id: number;
+    title: string;
+    url?: string | null;
+    status: string;
+    is_ai_related: boolean;
+    confidence: number;
+    collected_at: string;
+    content_hash: string;
+  } | null;
+  linked_vulnerability?: {
+    id: number;
+    title: string;
+    severity: string;
+    score: number;
+    status: string;
+  } | null;
+  merge_candidates: MergeCandidateExplanation[];
+  review_actions: ReviewAction[];
+  trace: Array<{
+    stage: string;
+    title: string;
+    status: string;
+    timestamp?: string | null;
+    detail: string;
+  }>;
+};
+
+export type VulnerabilityLineage = {
+  vulnerability_id: number;
+  title: string;
+  severity: string;
+  score: number;
+  status: string;
+  occurrences: Array<{
+    occurrence_id: number;
+    published_at?: string | null;
+    confidence: number;
+    evidence_excerpt: string;
+    intelligence_item_id?: number | null;
+    intelligence_title?: string | null;
+    intelligence_status?: string | null;
+    collected_document_id?: number | null;
+    collected_document_title?: string | null;
+    source_id?: number | null;
+    source_name?: string | null;
+    source_type?: string | null;
+    source_trust_score?: number | null;
+    source_trust_level?: string | null;
+  }>;
+  review_actions: Array<{
+    id: number;
+    actor: string;
+    action: string;
+    target_type: string;
+    target_id: number;
+    reason: string;
+    created_at: string;
+  }>;
 };
 
 export type PipelineEvent = {

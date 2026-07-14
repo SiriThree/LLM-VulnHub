@@ -14,11 +14,12 @@ from app.schemas.vulnerability import VulnerabilityCreate
 from app.services.llm_service import LLMClient
 from app.services.prompt_registry import PromptSpec, get_prompt_spec
 from app.services.rag_service import search_similar
-from app.services.scoring_service import calculate_risk
+from app.services.scoring_service import calculate_risk, priority_from_score
 from app.services.vulnerability_service import create_vulnerability
 
 PIPELINE_NAME = "vuln_analysis_v2"
 PIPELINE_VERSION = "v2"
+MISSING_TEXT = "原文未提供，需人工补充。"
 
 
 class VulnerabilityAnalysisState(TypedDict, total=False):
@@ -32,6 +33,7 @@ class VulnerabilityAnalysisState(TypedDict, total=False):
     severity: str
     risk_reason: str
     review_summary: str
+    publishable: bool
     risk_priority: str
     similar: list[dict[str, Any]]
     merge_suggestions: dict[str, Any]
@@ -69,7 +71,124 @@ def estimate_tokens(value: Any) -> int:
     return max(1, len(text) // 4)
 
 
-def safe_similar_hits(db: Session, query: str, top_k: int = 3) -> list[dict[str, Any]]:
+def normalize_missing_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return MISSING_TEXT
+    if text.lower() in {"unknown", "n/a", "none", "not provided", "unclear"}:
+        return MISSING_TEXT
+    return text
+
+
+def normalize_confidence(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, (int, float)):
+        return max(0.0, min(1.0, float(value)))
+
+    text = str(value or "").strip().lower()
+    if not text:
+        return default
+
+    word_map = {
+        "low": 0.2,
+        "medium": 0.5,
+        "med": 0.5,
+        "moderate": 0.55,
+        "high": 0.85,
+        "very high": 0.95,
+        "critical": 0.98,
+    }
+    if text in word_map:
+        return word_map[text]
+
+    try:
+        numeric = float(text)
+    except (TypeError, ValueError):
+        return default
+
+    if numeric > 1:
+        numeric /= 100.0
+    return max(0.0, min(1.0, numeric))
+
+
+def normalize_severity(value: Any, default: str = "中危") -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return default
+
+    aliases = {
+        "low": "低危",
+        "info": "低危",
+        "informational": "低危",
+        "medium": "中危",
+        "moderate": "中危",
+        "high": "高危",
+        "critical": "严重",
+        "severe": "严重",
+        "低": "低危",
+        "低危": "低危",
+        "中": "中危",
+        "中危": "中危",
+        "高": "高危",
+        "高危": "高危",
+        "严重": "严重",
+    }
+    return aliases.get(text, str(value).strip() or default)
+
+
+def normalize_score(value: Any, severity: str | None = None, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return max(0, min(100, int(round(float(value)))))
+
+    text = str(value or "").strip().lower()
+    if text:
+        try:
+            numeric = float(text)
+        except (TypeError, ValueError):
+            numeric = None
+        if numeric is not None:
+            if numeric <= 1:
+                numeric *= 100
+            return max(0, min(100, int(round(numeric))))
+
+    severity_map = {
+        "低危": 25,
+        "中危": 50,
+        "高危": 80,
+        "严重": 95,
+    }
+    return severity_map.get(normalize_severity(severity or value, default=""), default)
+
+
+def severity_rank(value: str) -> int:
+    return {"低危": 1, "中危": 2, "高危": 3, "严重": 4}.get(str(value), 0)
+
+
+def keyword_set(text: str) -> set[str]:
+    normalized = (text or "").lower()
+    keywords = {
+        "prompt injection",
+        "prompt",
+        "rag",
+        "langchain",
+        "graphcypherqachain",
+        "tool",
+        "agent",
+        "authorization",
+        "supply chain",
+        "ssrf",
+        "知识库",
+        "提示词",
+        "注入",
+        "越权",
+        "图数据库",
+        "cypher",
+    }
+    return {keyword for keyword in keywords if keyword in normalized}
+
+
+def safe_similar_hits(db: Session, query: str, top_k: int = 5) -> list[dict[str, Any]]:
     hits = search_similar(db, query, top_k)
     result: list[dict[str, Any]] = []
     for hit in hits:
@@ -83,6 +202,40 @@ def safe_similar_hits(db: Session, query: str, top_k: int = 3) -> list[dict[str,
             }
         )
     return result
+
+
+def filter_merge_candidates(hits: list[dict[str, Any]], extracted_fields: dict[str, Any]) -> list[dict[str, Any]]:
+    query_text = " ".join(
+        str(extracted_fields.get(key, ""))
+        for key in ["title", "vuln_type", "affected_component", "description", "attack_method", "impact"]
+    )
+    query_keywords = keyword_set(query_text)
+    query_type = str(extracted_fields.get("vuln_type", "")).strip().lower()
+    filtered: list[dict[str, Any]] = []
+
+    for hit in hits:
+        candidate = hit.get("vulnerability", {})
+        similarity = float(hit.get("similarity", 0.0))
+        candidate_text = " ".join(
+            str(candidate.get(key, ""))
+            for key in ["title", "vuln_type", "affected_component", "description", "attack_method", "impact"]
+        )
+        candidate_keywords = keyword_set(candidate_text)
+        overlap = len(query_keywords & candidate_keywords)
+        candidate_type = str(candidate.get("vuln_type", "")).strip().lower()
+        same_type = query_type and candidate_type and query_type == candidate_type
+
+        if similarity >= 0.38:
+            filtered.append(hit)
+            continue
+        if same_type and similarity >= 0.24:
+            filtered.append(hit)
+            continue
+        if overlap >= 2 and similarity >= 0.26:
+            filtered.append(hit)
+
+    filtered.sort(key=lambda item: float(item.get("similarity", 0.0)), reverse=True)
+    return filtered[:3]
 
 
 def create_analysis_job(db: Session, raw_text: str, source_url: str | None) -> AnalysisJob:
@@ -268,7 +421,7 @@ def preprocess_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisS
 
 def route_after_triage(state: VulnerabilityAnalysisState) -> Literal["extract_agent", "reject_non_vuln"]:
     relevance = state.get("relevance", {})
-    if bool(relevance.get("is_ai_vulnerability")) and float(relevance.get("confidence", 0.0)) >= 0.45:
+    if bool(relevance.get("is_ai_vulnerability")) and normalize_confidence(relevance.get("confidence", 0.0)) >= 0.45:
         return "extract_agent"
     return "reject_non_vuln"
 
@@ -278,59 +431,75 @@ def reject_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState
     state["score"] = 0
     state["severity"] = "低危"
     state["risk_reason"] = reason
+    state["publishable"] = False
+    state["risk_priority"] = "低"
     state["review_summary"] = "Reviewer Agent was skipped because triage did not classify this text as an AI vulnerability."
     state["asset_impact_summary"] = "No asset impact analysis was produced because the text was not classified as AI vulnerability intelligence."
     state["asset_impact_details"] = {
-        "impacted_assets": [],
-        "tenant_scope": "none",
-        "blast_radius": "none",
-        "operational_risk": "low",
+        "impacted_assets": "暂无明确受影响资产",
+        "tenant_scope": "局部",
+        "blast_radius": "有限",
+        "operational_risk": "低",
         "asset_summary": state["asset_impact_summary"],
     }
     state["extracted_fields"] = {
         "title": "未识别为 AI 漏洞",
-        "vuln_type": "unknown",
+        "vuln_type": "待确认",
         "severity": "低危",
         "score": 0,
-        "affected_component": "unknown",
+        "affected_component": "待确认",
         "description": state.get("cleaned_text", ""),
-        "attack_method": "unknown",
+        "attack_method": MISSING_TEXT,
         "impact": "当前文本未被识别为 AI 漏洞情报，建议补充更多上下文后重试。",
-        "mitigation": "补充漏洞触发条件、攻击路径、受影响组件或参考链接。",
+        "mitigation": MISSING_TEXT,
         "source": None,
         "reference_url": state.get("source_url"),
         "source_url": state.get("source_url"),
-        "confidence": float(state.get("relevance", {}).get("confidence", 0.0)),
+        "confidence": normalize_confidence(state.get("relevance", {}).get("confidence", 0.0)),
         "status": "待确认",
         "tags": ["needs-review"],
     }
     state["similar"] = []
-    state["merge_suggestions"] = {"should_merge": False, "candidate_ids": [], "reason": "Not applicable for non-vulnerability text."}
+    state["merge_suggestions"] = {
+        "should_merge": False,
+        "candidate_ids": [],
+        "reason": "Not applicable for non-vulnerability text.",
+    }
     return state
 
 
 def report_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState:
     fields = state["extracted_fields"]
     similar_lines = [
-        f"- #{item.get('vulnerability', {}).get('id')} {item.get('vulnerability', {}).get('title')} (similarity {item.get('similarity', 0)})"
+        f"- #{item.get('vulnerability', {}).get('id')} {item.get('vulnerability', {}).get('title')} (similarity {item.get('similarity', 0):.4f})"
         for item in state.get("similar", [])
     ]
-    similar_text = "\n".join(similar_lines) if similar_lines else "- No strong canonical match found."
+    similar_text = "\n".join(similar_lines) if similar_lines else "- No high-confidence canonical match passed the merge filter."
+    asset = state.get("asset_impact_details", {})
+    asset_block = "\n".join(
+        [
+            f"- Impacted assets: {normalize_missing_text(asset.get('impacted_assets'))}",
+            f"- Tenant scope: {normalize_missing_text(asset.get('tenant_scope'))}",
+            f"- Blast radius: {normalize_missing_text(asset.get('blast_radius'))}",
+            f"- Operational risk: {normalize_missing_text(asset.get('operational_risk'))}",
+            f"- Summary: {normalize_missing_text(state.get('asset_impact_summary', ''))}",
+        ]
+    )
     state["report"] = (
-        f"# {fields.get('title', 'unknown')}\n\n"
-        f"- Type: {fields.get('vuln_type', 'unknown')}\n"
-        f"- Severity: {state.get('severity', fields.get('severity', 'unknown'))}\n"
+        f"# {fields.get('title', '未命名漏洞')}\n\n"
+        f"- Type: {fields.get('vuln_type', '待确认')}\n"
+        f"- Severity: {state.get('severity', fields.get('severity', '待确认'))}\n"
         f"- Score: {state.get('score', fields.get('score', 0))}\n"
-        f"- Affected component: {fields.get('affected_component', 'unknown')}\n"
-        f"- Priority: {state.get('risk_priority', 'P2')}\n\n"
-        f"## Description\n{fields.get('description', 'unknown')}\n\n"
-        f"## Attack Method\n{fields.get('attack_method', 'unknown')}\n\n"
-        f"## Impact\n{fields.get('impact', 'unknown')}\n\n"
-        f"## Mitigation\n{fields.get('mitigation', 'unknown')}\n\n"
+        f"- Affected component: {fields.get('affected_component', '待确认')}\n"
+        f"- Priority: {state.get('risk_priority', '中')}\n\n"
+        f"## Description\n{normalize_missing_text(fields.get('description'))}\n\n"
+        f"## Attack Method\n{normalize_missing_text(fields.get('attack_method'))}\n\n"
+        f"## Impact\n{normalize_missing_text(fields.get('impact'))}\n\n"
+        f"## Mitigation\n{normalize_missing_text(fields.get('mitigation'))}\n\n"
         f"## Merge Suggestions\n{similar_text}\n\n"
-        f"## Risk Explanation Agent\n{state.get('risk_reason', '')}\n\n"
-        f"## Asset Impact Agent\n{state.get('asset_impact_summary', '')}\n\n"
-        f"## Reviewer Agent\n{state.get('review_summary', '')}\n"
+        f"## Risk Explanation Agent\n{normalize_missing_text(state.get('risk_reason'))}\n\n"
+        f"## Asset Impact Agent\n{asset_block}\n\n"
+        f"## Reviewer Agent\n{normalize_missing_text(state.get('review_summary'))}\n"
     )
     return state
 
@@ -351,7 +520,15 @@ def build_analysis_graph(db: Session):
             "related_area": "unknown",
             "reason": "The triage agent could not confirm that this text is AI vulnerability intelligence.",
         }
-        state["relevance"] = await run_json_agent(db, state, stage_name="triage", prompt_spec=triage_prompt, user_prompt=user_prompt, fallback_output=fallback)
+        state["relevance"] = await run_json_agent(
+            db,
+            state,
+            stage_name="triage",
+            prompt_spec=triage_prompt,
+            user_prompt=user_prompt,
+            fallback_output=fallback,
+        )
+        state["relevance"]["confidence"] = normalize_confidence(state["relevance"].get("confidence", 0.0))
         return state
 
     async def extraction_agent_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState:
@@ -359,39 +536,58 @@ def build_analysis_graph(db: Session):
         fallback = {
             "title": "AI vulnerability pending review",
             "vuln_type": state.get("relevance", {}).get("related_area", "unknown"),
-            "affected_component": "unknown",
+            "affected_component": "待确认",
             "severity": "中危",
             "description": state["cleaned_text"][:500],
-            "attack_method": "unknown",
-            "impact": "unknown",
-            "mitigation": "unknown",
+            "attack_method": MISSING_TEXT,
+            "impact": MISSING_TEXT,
+            "mitigation": MISSING_TEXT,
             "tags": ["needs-review"],
         }
-        data = await run_json_agent(db, state, stage_name="extract", prompt_spec=extraction_prompt, user_prompt=user_prompt, fallback_output=fallback)
+        data = await run_json_agent(
+            db,
+            state,
+            stage_name="extract",
+            prompt_spec=extraction_prompt,
+            user_prompt=user_prompt,
+            fallback_output=fallback,
+        )
         data.setdefault("source", None)
         data.setdefault("source_url", state.get("source_url"))
         data.setdefault("reference_url", state.get("source_url"))
-        data.setdefault("confidence", float(state.get("relevance", {}).get("confidence", 0.0)))
+        data.setdefault("confidence", normalize_confidence(state.get("relevance", {}).get("confidence", 0.0)))
         data.setdefault("status", "待确认")
         data.setdefault("tags", [])
+        data["severity"] = normalize_severity(data.get("severity"))
+        data["score"] = normalize_score(data.get("score"), data["severity"], default=0)
+        data["confidence"] = normalize_confidence(data.get("confidence", 0.0))
+        data["description"] = normalize_missing_text(data.get("description"))
+        data["attack_method"] = normalize_missing_text(data.get("attack_method"))
+        data["impact"] = normalize_missing_text(data.get("impact"))
+        data["mitigation"] = normalize_missing_text(data.get("mitigation"))
         state["extracted_fields"] = data
         return state
 
     async def merge_agent_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState:
-        hits = safe_similar_hits(db, state.get("cleaned_text", ""), 3)
-        state["similar"] = hits
-        if not hits:
+        hits = safe_similar_hits(db, state.get("cleaned_text", ""), 5)
+        filtered_hits = filter_merge_candidates(hits, state.get("extracted_fields", {}))
+        state["similar"] = filtered_hits
+        if not filtered_hits:
             state["merge_suggestions"] = {
                 "should_merge": False,
                 "candidate_ids": [],
-                "reason": "No similar published vulnerabilities were found.",
+                "reason": "No high-confidence canonical match passed the merge filter.",
                 "confidence": 0.0,
             }
             return state
 
         candidates_summary = "\n\n".join(
-            f"ID: {item['vulnerability']['id']}\nTitle: {item['vulnerability']['title']}\nType: {item['vulnerability']['vuln_type']}\nSimilarity: {item['similarity']}\nEvidence: {item['chunk_text']}"
-            for item in hits
+            f"ID: {item['vulnerability']['id']}\n"
+            f"Title: {item['vulnerability']['title']}\n"
+            f"Type: {item['vulnerability']['vuln_type']}\n"
+            f"Similarity: {item['similarity']:.4f}\n"
+            f"Evidence: {item['chunk_text']}"
+            for item in filtered_hits
         )
         user_prompt = merge_prompt.render(
             intel=json.dumps(state.get("extracted_fields", {}), ensure_ascii=False, default=str),
@@ -403,7 +599,14 @@ def build_analysis_graph(db: Session):
             "reason": "Similar items were found, but the merge agent could not confirm a canonical match.",
             "confidence": 0.0,
         }
-        state["merge_suggestions"] = await run_json_agent(db, state, stage_name="merge", prompt_spec=merge_prompt, user_prompt=user_prompt, fallback_output=fallback)
+        state["merge_suggestions"] = await run_json_agent(
+            db,
+            state,
+            stage_name="merge",
+            prompt_spec=merge_prompt,
+            user_prompt=user_prompt,
+            fallback_output=fallback,
+        )
         return state
 
     async def risk_agent_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState:
@@ -420,12 +623,23 @@ def build_analysis_graph(db: Session):
         )
         fallback = {
             "risk_reason": f"Rule-based score is {score}, mapped to {severity}. Key factors: {'; '.join(factors)}.",
-            "priority": "P0" if score >= 85 else "P1" if score >= 70 else "P2" if score >= 40 else "P3",
+            "priority": priority_from_score(score),
             "analyst_notes": "Generated by the fallback rule engine.",
         }
-        risk_result = await run_json_agent(db, state, stage_name="risk", prompt_spec=risk_prompt, user_prompt=user_prompt, fallback_output=fallback)
+        risk_result = await run_json_agent(
+            db,
+            state,
+            stage_name="risk",
+            prompt_spec=risk_prompt,
+            user_prompt=user_prompt,
+            fallback_output=fallback,
+        )
         state["risk_reason"] = str(risk_result.get("risk_reason", fallback["risk_reason"]))
         state["risk_priority"] = str(risk_result.get("priority", fallback["priority"]))
+        if severity_rank(severity) >= 4 and state["risk_priority"] != "紧急":
+            state["risk_priority"] = "紧急"
+        elif severity_rank(severity) == 3 and state["risk_priority"] == "紧急":
+            state["risk_priority"] = "高"
         return state
 
     async def asset_impact_agent_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState:
@@ -440,13 +654,25 @@ def build_analysis_graph(db: Session):
             "operational_risk": "medium",
             "asset_summary": "The issue primarily affects the AI application layer, its retrieval path, and tool execution boundary. Blast radius depends on tenant isolation and permission design.",
         }
-        asset_result = await run_json_agent(db, state, stage_name="asset_impact", prompt_spec=asset_prompt, user_prompt=user_prompt, fallback_output=fallback)
+        asset_result = await run_json_agent(
+            db,
+            state,
+            stage_name="asset_impact",
+            prompt_spec=asset_prompt,
+            user_prompt=user_prompt,
+            fallback_output=fallback,
+        )
+        impacted_assets = asset_result.get("impacted_assets", fallback["impacted_assets"])
+        if isinstance(impacted_assets, list):
+            impacted_assets_value = "、".join(str(item) for item in impacted_assets if str(item).strip())
+        else:
+            impacted_assets_value = str(impacted_assets)
         state["asset_impact_summary"] = str(asset_result.get("asset_summary", fallback["asset_summary"]))
         state["asset_impact_details"] = {
-            "impacted_assets": asset_result.get("impacted_assets", fallback["impacted_assets"]),
-            "tenant_scope": asset_result.get("tenant_scope", fallback["tenant_scope"]),
-            "blast_radius": asset_result.get("blast_radius", fallback["blast_radius"]),
-            "operational_risk": asset_result.get("operational_risk", fallback["operational_risk"]),
+            "impacted_assets": normalize_missing_text(impacted_assets_value),
+            "tenant_scope": normalize_missing_text(asset_result.get("tenant_scope", fallback["tenant_scope"])),
+            "blast_radius": normalize_missing_text(asset_result.get("blast_radius", fallback["blast_radius"])),
+            "operational_risk": normalize_missing_text(asset_result.get("operational_risk", fallback["operational_risk"])),
             "asset_summary": state["asset_impact_summary"],
         }
         return state
@@ -465,8 +691,16 @@ def build_analysis_graph(db: Session):
             "review_summary": "The record is structurally complete enough for triage, but should remain in manual review before publishing.",
             "missing_fields": [],
         }
-        review_result = await run_json_agent(db, state, stage_name="review", prompt_spec=reviewer_prompt, user_prompt=user_prompt, fallback_output=fallback)
+        review_result = await run_json_agent(
+            db,
+            state,
+            stage_name="review",
+            prompt_spec=reviewer_prompt,
+            user_prompt=user_prompt,
+            fallback_output=fallback,
+        )
         state["review_summary"] = str(review_result.get("review_summary", fallback["review_summary"]))
+        state["publishable"] = bool(review_result.get("publishable"))
         state["extracted_fields"]["status"] = "已分析" if review_result.get("publishable") else "待人工复核"
         return state
 
@@ -483,7 +717,11 @@ def build_analysis_graph(db: Session):
 
     graph.add_edge(START, "preprocess")
     graph.add_edge("preprocess", "triage_agent")
-    graph.add_conditional_edges("triage_agent", route_after_triage, {"extract_agent": "extract_agent", "reject_non_vuln": "reject_non_vuln"})
+    graph.add_conditional_edges(
+        "triage_agent",
+        route_after_triage,
+        {"extract_agent": "extract_agent", "reject_non_vuln": "reject_non_vuln"},
+    )
     graph.add_edge("extract_agent", "merge_agent")
     graph.add_edge("merge_agent", "risk_agent")
     graph.add_edge("risk_agent", "asset_impact_agent")
@@ -559,7 +797,7 @@ async def analyze_text(db: Session, raw_text: str, source_url: str | None = None
     try:
         state = await analysis_graph.ainvoke(state)
         relevance = state.get("relevance", {})
-        is_relevant = bool(relevance.get("is_ai_vulnerability")) and float(relevance.get("confidence", 0.0)) >= 0.45
+        is_relevant = bool(relevance.get("is_ai_vulnerability")) and normalize_confidence(relevance.get("confidence", 0.0)) >= 0.45
         if save and is_relevant:
             payload = VulnerabilityCreate(**state["extracted_fields"])
             vulnerability = create_vulnerability(db, payload, state.get("risk_reason", ""))

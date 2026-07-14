@@ -26,37 +26,6 @@ function Bars({ data }: { data: Record<string, number> }) {
   );
 }
 
-function TrendTable({ rows }: { rows: OpsMetrics["daily_trends"] }) {
-  if (rows.length === 0) {
-    return <div className="text-sm text-slate-500">近 7 天暂无趋势数据。</div>;
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead className="text-left text-slate-500">
-          <tr>
-            <th className="pb-3 pr-4 font-medium">日期</th>
-            <th className="pb-3 pr-4 font-medium">采集文档</th>
-            <th className="pb-3 pr-4 font-medium">分析任务</th>
-            <th className="pb-3 font-medium">审核动作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.date} className="border-t border-border">
-              <td className="py-3 pr-4">{row.date}</td>
-              <td className="py-3 pr-4">{row.collected_documents}</td>
-              <td className="py-3 pr-4">{row.analysis_jobs}</td>
-              <td className="py-3">{row.review_actions}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 export default async function OpsPage() {
   const empty: OpsMetrics = {
     queue_metrics: { queued: 0, running: 0, success: 0, failed: 0 },
@@ -73,6 +42,7 @@ export default async function OpsPage() {
     },
     daily_trends: [],
   };
+
   const metrics = await api<OpsMetrics>("/ops/metrics").catch(() => empty);
   const scheduler = await api<SchedulerOverview>("/ops/scheduler").catch(() => ({ beat_jobs: [], sources: [] }));
 
@@ -144,19 +114,14 @@ export default async function OpsPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
-          <h2 className="mb-4 font-semibold">LLM 供应商分布</h2>
+          <h2 className="mb-4 font-semibold">LLM 供应商</h2>
           <Bars data={metrics.llm_usage.provider_distribution} />
         </Card>
         <Card>
-          <h2 className="mb-4 font-semibold">模型分布</h2>
+          <h2 className="mb-4 font-semibold">模型</h2>
           <Bars data={metrics.llm_usage.model_distribution} />
         </Card>
       </div>
-
-      <Card>
-        <h2 className="mb-4 font-semibold">近 7 天趋势</h2>
-        <TrendTable rows={metrics.daily_trends} />
-      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>

@@ -92,7 +92,7 @@ def is_meaningful(value: Any) -> bool:
         return False
     if isinstance(value, str):
         normalized = value.strip().lower()
-        return normalized not in {"", "unknown", "n/a", "none"}
+        return normalized not in {"", "unknown", "n/a", "none", "not provided"}
     if isinstance(value, list):
         return len(value) > 0
     return True
@@ -122,7 +122,7 @@ def ensure_eval_canonical_vulnerabilities() -> None:
                 reference_url=item["source_url"],
                 source_url=item["source_url"],
                 confidence=0.99,
-                status="未修复",
+                status="未确认",
                 tags=[item["vuln_type"], "eval"],
             )
             score, severity, factors = calculate_risk(payload)
@@ -195,6 +195,7 @@ def summarize(results: list[SampleResult]) -> dict[str, Any]:
         "provider": os.getenv("LLM_PROVIDER", "mock"),
         "dataset_size": total,
         "positive_samples": len(positives),
+        "negative_samples": total - len(positives),
         "triage_accuracy": triage_correct / total if total else 0.0,
         "triage_precision": precision,
         "triage_recall": recall,

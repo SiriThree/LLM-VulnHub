@@ -17,9 +17,13 @@ from app.core.config import get_settings
 from app.db.models import CollectedDocument, DataSource, IntelligenceItem, MergeCandidate, Task, Vulnerability
 from app.db.session import SessionLocal
 from app.schemas.collector import DataSourceCreate, DataSourceUpdate
+from app.schemas.vulnerability import normalize_confidence_value
+from app.services.provenance_service import build_source_health
 from app.workflows.vuln_analysis_graph import analyze_text, get_analysis_job_snapshot
 
 settings = get_settings()
+AUTO_PUBLISH_CONFIDENCE = 0.9
+AUTO_PUBLISH_MIN_SCORE = 70
 
 TASK_STAGE_ORDER = [
     "queued",
@@ -35,6 +39,186 @@ TASK_STAGE_ORDER = [
     "storing",
     "completed",
 ]
+
+AI_CONTEXT_TERMS = {
+    "llm",
+    "large language model",
+    "prompt",
+    "rag",
+    "agent",
+    "langchain",
+    "llamaindex",
+    "autogen",
+    "crewai",
+    "haystack",
+    "mcp",
+    "tool calling",
+    "model context",
+    "embedding",
+    "vector database",
+    "inference",
+}
+
+SECURITY_SIGNAL_TERMS = {
+    "cve-",
+    "ghsa-",
+    "vulnerability",
+    "advisory",
+    "security issue",
+    "security advisory",
+    "prompt injection",
+    "indirect prompt injection",
+    "jailbreak",
+    "system prompt leakage",
+    "data leakage",
+    "data exposure",
+    "secret leakage",
+    "unauthorized",
+    "permission bypass",
+    "authorization bypass",
+    "supply chain",
+    "ssrf",
+    "rce",
+    "sql injection",
+    "path traversal",
+    "cross-tenant",
+    "privilege escalation",
+    "tool abuse",
+    "model poisoning",
+    "cypher injection",
+}
+
+NOISE_SIGNAL_TERMS = {
+    "release notes",
+    "release v",
+    "changelog",
+    "launches",
+    "brings",
+    "announces",
+    "newsroom",
+    "news",
+    "improving",
+    "getting started",
+    "one click",
+    "analytics",
+    "spend controls",
+    "partnership",
+    "case study",
+    "customer story",
+    "webinar",
+    "documentation",
+    "docs",
+    "how to",
+    "tutorial",
+    "benchmark",
+    "profiling",
+    "evaluation",
+    "conference",
+    "native-speed",
+    "foundation managed compute",
+    "sagemaker studio",
+    "employees",
+}
+
+
+def _normalize_for_match(value: str) -> str:
+    return " ".join((value or "").replace("\r", " ").replace("\n", " ").lower().split())
+
+
+def _prefilter_candidate(source: DataSource, item: dict[str, str]) -> tuple[bool, str]:
+    title = _normalize_for_match(item.get("title", ""))
+    raw_text = _normalize_for_match(item.get("raw_text", ""))
+    combined = f"{title}\n{raw_text[:4000]}"
+
+    ai_hit = any(term in combined for term in AI_CONTEXT_TERMS)
+    security_hit = any(term in combined for term in SECURITY_SIGNAL_TERMS)
+    noise_hit = any(term in title for term in NOISE_SIGNAL_TERMS)
+
+    if not ai_hit and source.source_type != "github":
+        return False, "Missing AI security context."
+    if not security_hit:
+        return False, "Missing explicit security or vulnerability signal."
+    if noise_hit and "security" not in title and "advisory" not in title and "vulnerability" not in title:
+        return False, "Looks like product/news/release content rather than vulnerability intelligence."
+    return True, "passed"
+
+
+def get_collector_overview(db: Session) -> dict[str, Any]:
+    sources = db.scalars(select(DataSource).order_by(DataSource.created_at.desc())).all()
+    docs = db.scalars(select(CollectedDocument).order_by(CollectedDocument.collected_at.desc())).all()
+    tasks = db.scalars(select(Task).order_by(Task.created_at.desc())).all()
+
+    source_metrics = {
+        "total": len(sources),
+        "enabled": sum(1 for source in sources if source.enabled),
+        "rss": sum(1 for source in sources if source.source_type == "rss"),
+        "github": sum(1 for source in sources if source.source_type == "github"),
+        "web": sum(1 for source in sources if source.source_type == "web"),
+        "local_file": sum(1 for source in sources if source.source_type == "local_file"),
+    }
+
+    document_metrics = {
+        "total": len(docs),
+        "queued_analysis": sum(1 for doc in docs if doc.status == "queued_analysis"),
+        "pending_review": sum(1 for doc in docs if doc.status == "pending_review"),
+        "stored": sum(1 for doc in docs if doc.status == "stored"),
+        "ignored": sum(1 for doc in docs if doc.status == "ignored"),
+        "ai_related": sum(1 for doc in docs if doc.is_ai_related),
+    }
+
+    queue_metrics = {
+        "crawl_running": sum(1 for task in tasks if task.task_type == "crawl" and task.status in {"queued", "running"}),
+        "analysis_running": sum(1 for task in tasks if task.task_type == "analyze_document" and task.status in {"queued", "running"}),
+        "review_running": sum(1 for task in tasks if task.task_type == "review_helper" and task.status in {"queued", "running"}),
+        "crawl_failed": sum(1 for task in tasks if task.task_type == "crawl" and task.status == "failed"),
+    }
+
+    recent_runs: list[dict[str, Any]] = []
+    crawl_tasks = [task for task in tasks if task.task_type == "crawl"]
+    for task in crawl_tasks[:12]:
+        for run in list((task.output_data or {}).get("source_runs", []))[:4]:
+            recent_runs.append(
+                {
+                    "task_id": task.id,
+                    "source_id": run.get("source_id"),
+                    "source_name": str(run.get("source_name") or "unknown source"),
+                    "source_type": str(run.get("source_type") or "unknown"),
+                    "status": str(run.get("status") or task.status),
+                    "stage": str(run.get("stage") or (task.output_data or {}).get("current_stage") or "queued"),
+                    "discovered": int(run.get("discovered", 0) or 0),
+                    "processed": int(run.get("processed", 0) or 0),
+                    "queued_analysis": int(run.get("queued_analysis", 0) or 0),
+                    "saved": int(run.get("saved", 0) or 0),
+                    "duplicates": int(run.get("duplicates", 0) or 0),
+                    "pending_review": int(run.get("pending_review", 0) or 0),
+                    "ignored": int(run.get("ignored", 0) or 0),
+                    "failed": int(run.get("failed", 0) or 0),
+                    "started_at": run.get("started_at"),
+                    "finished_at": run.get("finished_at"),
+                    "elapsed_seconds": run.get("elapsed_seconds"),
+                    "error": run.get("error"),
+                }
+            )
+    recent_runs = recent_runs[:12]
+
+    pending_documents = [
+        doc
+        for doc in docs
+        if doc.status in {"queued_analysis", "pending_review"}
+    ][:10]
+    recent_documents = docs[:10]
+    source_health = [build_source_health(source, docs, tasks) for source in sources]
+    source_health.sort(key=lambda item: (item["trust_score"], item["documents_total"], item["source_id"]), reverse=True)
+
+    return {
+        "source_metrics": source_metrics,
+        "document_metrics": document_metrics,
+        "queue_metrics": queue_metrics,
+        "source_health": source_health,
+        "recent_runs": recent_runs,
+        "pending_documents": pending_documents,
+        "recent_documents": recent_documents,
+    }
 
 
 def utcnow() -> datetime:
@@ -66,10 +250,22 @@ def content_hash(text: str) -> str:
 
 def _intel_status(is_related: bool, confidence: float) -> str:
     if not is_related:
-        return "rejected"
+        return "ignored"
     if confidence >= 0.5:
         return "pending_review"
     return "triaged"
+
+
+def _should_auto_publish(state: dict[str, Any], *, is_related: bool, confidence: float) -> bool:
+    if not is_related:
+        return False
+    if confidence < AUTO_PUBLISH_CONFIDENCE:
+        return False
+    if int(state.get("score", 0) or 0) < AUTO_PUBLISH_MIN_SCORE:
+        return False
+    if state.get("similar"):
+        return False
+    return bool(state.get("publishable"))
 
 
 def _json_safe_vulnerability_snapshot(vulnerability: Vulnerability) -> dict[str, Any]:
@@ -128,7 +324,7 @@ def _ensure_intelligence_item_for_document(
         triage_category=triage_category,
         triage_reason=triage_reason,
         extracted_data=extracted_data or vulnerability_data,
-        status="approved" if doc.status == "stored" else "pending_review" if doc.is_ai_related else "rejected",
+        status="approved" if doc.status == "stored" else "pending_review" if doc.is_ai_related else "ignored",
     )
     db.add(item)
     db.commit()
@@ -718,7 +914,7 @@ async def _run_analysis(db: Session, task: Task) -> dict[str, Any]:
         state = await analyze_text(db, doc.raw_text, doc.url, save=False)
         rel = state.get("relevance", {})
         is_related = bool(rel.get("is_ai_vulnerability"))
-        confidence = float(rel.get("confidence", 0.0))
+        confidence = normalize_confidence_value(rel.get("confidence", 0.0))
 
         status = "ignored"
         if not is_related:
@@ -789,6 +985,18 @@ async def _run_analysis(db: Session, task: Task) -> dict[str, Any]:
             )
         db.commit()
 
+        auto_published = False
+        if _should_auto_publish(state, is_related=is_related, confidence=confidence):
+            from app.services.intel_service import publish_intelligence_item
+
+            intel_item = publish_intelligence_item(
+                db,
+                intel_item,
+                notes="Auto-published by high-confidence collector pipeline.",
+            )
+            doc = intel_item.collected_document or doc
+            auto_published = True
+
         output = dict(task.output_data or {})
         output["agent_summary"] = [
             {
@@ -803,6 +1011,7 @@ async def _run_analysis(db: Session, task: Task) -> dict[str, Any]:
         output["analysis_job_id"] = state.get("analysis_job_id")
         output["intel_item_id"] = intel_item.id
         output["document_status"] = doc.status
+        output["auto_published"] = auto_published
         task.output_data = output
         task.status = "success"
         _append_stage(task, db, "completed", "success", f"Analysis completed for document #{doc.id}.", {"document_id": doc.id, "intel_item_id": intel_item.id})
@@ -827,6 +1036,15 @@ async def _run_analysis(db: Session, task: Task) -> dict[str, Any]:
                 )
                 dispatch_notification_task(notification_task.id)
                 _update_metrics(task, db, notifications=1)
+        elif auto_published:
+            _append_stage(
+                task,
+                db,
+                "storing",
+                "success",
+                f"High-confidence intelligence auto-published as vulnerability #{intel_item.vulnerability_id}.",
+                {"document_id": doc.id, "intel_item_id": intel_item.id, "vulnerability_id": intel_item.vulnerability_id},
+            )
     except Exception as exc:
         task.status = "failed"
         task.error_message = str(exc)
@@ -1030,6 +1248,29 @@ async def _process_candidate(db: Session, task: Task, source: DataSource, item: 
         return
 
     title = item.get("title", "untitled")[:300]
+    passed_prefilter, prefilter_reason = _prefilter_candidate(source, item)
+    if not passed_prefilter:
+        _update_metrics(task, db, ignored=1)
+        current_run = next(
+            (run for run in (task.output_data or {}).get("source_runs", []) if run.get("source_id") == source.id),
+            None,
+        )
+        _upsert_source_run(
+            task,
+            db,
+            source,
+            {
+                "ignored": (current_run or {}).get("ignored", 0) + 1,
+                "stage": "filtering",
+                "event": {
+                    "stage": "filtering",
+                    "message": f"Prefilter ignored: {title}",
+                    "reason": prefilter_reason,
+                },
+            },
+        )
+        return
+
     doc_hash = content_hash(raw_text)
 
     _append_stage(task, db, "ingesting", "running", f"Ingesting {title}.", {"source_id": source.id})

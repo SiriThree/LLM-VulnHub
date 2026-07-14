@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import RequestIdentity, require_role
-from app.db.models import Vulnerability, VulnerabilityOccurrence
+from app.db.models import IntelligenceItem, Vulnerability, VulnerabilityOccurrence
 from app.db.session import get_db
 from app.schemas.vulnerability import (
     DashboardStats,
     VulnerabilityCreate,
     VulnerabilityDetailRead,
+    VulnerabilityLineageRead,
     VulnerabilityList,
     VulnerabilityRead,
     VulnerabilityUpdate,
@@ -16,6 +17,7 @@ from app.services.vulnerability_service import (
     create_vulnerability,
     dashboard_stats,
     list_vulnerabilities,
+    serialize_vulnerability_lineage,
     serialize_vulnerability,
     serialize_vulnerability_detail,
     update_vulnerability,
@@ -50,7 +52,12 @@ def get_api(vuln_id: int, db: Session = Depends(get_db)):
         db.query(Vulnerability)
         .options(
             selectinload(Vulnerability.tags),
-            selectinload(Vulnerability.occurrences).selectinload(VulnerabilityOccurrence.intelligence_item),
+            selectinload(Vulnerability.occurrences)
+            .selectinload(VulnerabilityOccurrence.intelligence_item)
+            .selectinload(IntelligenceItem.source),
+            selectinload(Vulnerability.occurrences)
+            .selectinload(VulnerabilityOccurrence.intelligence_item)
+            .selectinload(IntelligenceItem.collected_document),
             selectinload(Vulnerability.analyses),
         )
         .filter(Vulnerability.id == vuln_id)
@@ -59,6 +66,26 @@ def get_api(vuln_id: int, db: Session = Depends(get_db)):
     if not vuln:
         raise HTTPException(404, "vulnerability not found")
     return serialize_vulnerability_detail(vuln)
+
+
+@router.get("/{vuln_id}/lineage", response_model=VulnerabilityLineageRead)
+def get_lineage_api(vuln_id: int, db: Session = Depends(get_db)):
+    vuln = (
+        db.query(Vulnerability)
+        .options(
+            selectinload(Vulnerability.occurrences)
+            .selectinload(VulnerabilityOccurrence.intelligence_item)
+            .selectinload(IntelligenceItem.source),
+            selectinload(Vulnerability.occurrences)
+            .selectinload(VulnerabilityOccurrence.intelligence_item)
+            .selectinload(IntelligenceItem.collected_document),
+        )
+        .filter(Vulnerability.id == vuln_id)
+        .first()
+    )
+    if not vuln:
+        raise HTTPException(404, "vulnerability not found")
+    return serialize_vulnerability_lineage(db, vuln)
 
 
 @router.post("", response_model=VulnerabilityRead)

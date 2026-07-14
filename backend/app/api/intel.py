@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.schemas.intel import (
     BatchReviewDecisionRequest,
     BatchReviewDecisionResponse,
+    IntelligenceLineageRead,
     IntelligenceItemRead,
     IntelligenceListResponse,
     IntelligenceStatsRead,
@@ -23,6 +24,7 @@ from app.services.intel_service import (
     batch_reject_intelligence_items,
     export_review_actions_csv,
     get_intelligence_item,
+    get_intelligence_lineage,
     get_intelligence_stats,
     get_review_stats,
     list_intelligence_items,
@@ -55,6 +57,14 @@ def get_item(intel_item_id: int, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(404, "intelligence item not found")
     return item
+
+
+@router.get("/items/{intel_item_id}/lineage", response_model=IntelligenceLineageRead)
+def get_item_lineage(intel_item_id: int, db: Session = Depends(get_db)):
+    payload = get_intelligence_lineage(db, intel_item_id)
+    if not payload:
+        raise HTTPException(404, "intelligence item not found")
+    return payload
 
 
 @router.get("/items/{intel_item_id}/actions", response_model=ReviewActionListResponse)
@@ -91,7 +101,10 @@ def approve_item(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    item = approve_intelligence_item(db, intel_item_id, actor=payload.actor or identity.actor, notes=payload.notes)
+    try:
+        item = approve_intelligence_item(db, intel_item_id, actor=payload.actor or identity.actor, notes=payload.notes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     if not item:
         raise HTTPException(404, "intelligence item not found")
     return item

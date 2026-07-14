@@ -1,6 +1,11 @@
+from pathlib import Path
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -32,7 +37,10 @@ class Settings(BaseSettings):
     duplicate_similarity_threshold: float = 0.88
 
     model_config = SettingsConfigDict(
-        env_file=("backend/.env", ".env", "../.env"),
+        env_file=(
+            str(PROJECT_ROOT / ".env"),
+            str(BACKEND_ROOT / ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )

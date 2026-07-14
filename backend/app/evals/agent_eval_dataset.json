@@ -66,6 +66,116 @@
     }
   },
   {
+    "id": "triage-pos-007",
+    "raw_text": "LangChain's GraphCypherQAChain converts natural language into Cypher without restricting destructive graph operations. Prompt-crafted questions can induce DELETE and MERGE statements against the backing graph database.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Prompt Injection",
+      "severity": "严重",
+      "affected_component": "LangChain GraphCypherQAChain",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-008",
+    "raw_text": "A knowledge-base assistant ingests PDF documents containing hidden instructions. During retrieval-augmented generation, the retrieved text overrides the system prompt and causes unauthorized external tool invocation.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Prompt Injection",
+      "severity": "高危",
+      "affected_component": "RAG Knowledge Base / Tool Calling",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-009",
+    "raw_text": "An MCP-style tool bridge forwards raw tool parameters from the model into an internal HTTP client. Attackers can coerce the model into calling internal endpoints and exfiltrating metadata through tool responses.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Tool SSRF",
+      "severity": "严重",
+      "affected_component": "LLM Tool Bridge",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-010",
+    "raw_text": "A memory module stores user-controlled summaries and later injects them into future planning turns. Malicious summaries poison subsequent tasks and lead to cross-session policy bypass.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Context / Memory Poisoning",
+      "severity": "高危",
+      "affected_component": "Agent Memory Store",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-011",
+    "raw_text": "The system prompt is accidentally included in a support trace export package after a failed LLM run. The exported ZIP can be downloaded by tenant support operators who should not see hidden prompt instructions.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "System Prompt Exposure",
+      "severity": "中危",
+      "affected_component": "LLM Support Trace Exporter",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-012",
+    "raw_text": "A tenant-isolated agent platform lets users upload plugin manifests. Because permission changes are not reviewed, a manifest update silently adds broader data scopes and the agent can access calendars and mailboxes beyond the original grant.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Plugin Supply Chain Risk",
+      "severity": "严重",
+      "affected_component": "Plugin Permission Broker",
+      "merge_should_merge": true
+    }
+  },
+  {
+    "id": "triage-pos-013",
+    "raw_text": "中文样本：某 RAG 知识库问答模块在检索后直接拼接文档片段与系统提示词，未做指令隔离。攻击者可在上传文档中植入恶意提示词，诱导模型泄露系统配置并越权调用工具。",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Prompt Injection",
+      "severity": "高危",
+      "affected_component": "RAG 知识库问答模块",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-014",
+    "raw_text": "中文样本：某大模型应用的工具调用层未对白名单参数做校验，模型可被提示词诱导访问内部地址并读取敏感服务返回内容，造成越权访问与数据泄露。",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Tool SSRF",
+      "severity": "严重",
+      "affected_component": "LLM 工具调用层",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-015",
+    "raw_text": "An agent review workflow embeds retrieved CRM notes into the next reasoning step. A poisoned note can instruct the model to reveal hidden sales guidance and re-route approvals to a different user.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Retrieved Content Injection",
+      "severity": "高危",
+      "affected_component": "Agent Review Workflow",
+      "merge_should_merge": false
+    }
+  },
+  {
+    "id": "triage-pos-016",
+    "raw_text": "During model evaluation, raw judge prompts and private customer test cases are exported into a shared artifact bucket. The bucket is accessible to engineering contractors outside the intended red-team scope.",
+    "expected": {
+      "is_ai_vulnerability": true,
+      "vuln_type": "Training / Evaluation Data Exposure",
+      "severity": "中危",
+      "affected_component": "Evaluation Artifact Pipeline",
+      "merge_should_merge": true
+    }
+  },
+  {
     "id": "triage-neg-001",
     "raw_text": "LangChain released a new patch version with improved developer ergonomics, faster tracing, and better tutorial examples for local development.",
     "expected": {
@@ -89,6 +199,34 @@
   {
     "id": "triage-neg-004",
     "raw_text": "The research note explains retrieval augmentation concepts and how embeddings improve answer quality in question answering systems. It does not describe any exploit or bypass.",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  },
+  {
+    "id": "triage-neg-005",
+    "raw_text": "FastAPI backend now supports pagination, CSV export, and improved SQL indexes for vulnerability records. Redis is used for background task scheduling.",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  },
+  {
+    "id": "triage-neg-006",
+    "raw_text": "The model card discusses context window size, multilingual benchmarks, and cost-performance tradeoffs for enterprise deployment.",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  },
+  {
+    "id": "triage-neg-007",
+    "raw_text": "中文非漏洞样本：系统采用 PostgreSQL 存储漏洞记录，并通过 Docker Compose 启动前后端服务，支持按等级和时间进行筛选。",
+    "expected": {
+      "is_ai_vulnerability": false
+    }
+  },
+  {
+    "id": "triage-neg-008",
+    "raw_text": "asdj123!!!@@@ ... NULL ... 测试测试 ... x7#￥%模型",
     "expected": {
       "is_ai_vulnerability": false
     }

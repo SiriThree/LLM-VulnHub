@@ -1,4 +1,7 @@
+import os
+
 from celery import Celery
+from kombu import Queue
 
 from app.core.config import get_settings
 
@@ -6,6 +9,14 @@ settings = get_settings()
 celery_app = Celery("llm_vulnhub", broker=settings.redis_url, backend=settings.redis_url)
 celery_app.conf.timezone = "Asia/Shanghai"
 celery_app.conf.task_default_queue = "default"
+celery_app.conf.broker_connection_retry_on_startup = True
+celery_app.conf.task_queues = (
+    Queue("default"),
+    Queue("ingestion"),
+    Queue("analysis"),
+    Queue("review"),
+    Queue("notification"),
+)
 celery_app.conf.task_routes = {
     "app.worker.collect_task": {"queue": "ingestion"},
     "app.worker.analyze_document_task": {"queue": "analysis"},
@@ -19,6 +30,10 @@ celery_app.conf.beat_schedule = {
         "schedule": 300.0,
     }
 }
+
+if os.name == "nt":
+    celery_app.conf.worker_pool = "solo"
+    celery_app.conf.worker_concurrency = 1
 
 
 @celery_app.task(

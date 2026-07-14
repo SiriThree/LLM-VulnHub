@@ -1,28 +1,29 @@
 import { HTMLAttributes } from "react";
 
+import { formatReviewStatus, formatSeverity, severityTone } from "@/lib/presentation";
 import { cn } from "@/lib/utils";
 
-const color: Record<string, string> = {
-  严重: "bg-danger text-white",
-  高危: "bg-warning text-white",
-  中危: "bg-primary text-white",
-  低危: "bg-success text-white",
-  approved: "bg-success text-white",
-  pending_review: "bg-warning text-white",
-  rejected: "bg-danger text-white",
-};
-
 export function Badge({ className, children, ...props }: HTMLAttributes<HTMLSpanElement>) {
+  const raw = String(children ?? "");
+  const looksLikeSeverity =
+    raw.includes("危") || ["critical", "high", "medium", "low", "严重", "高危", "中危", "低危"].includes(raw.toLowerCase());
+  const text = looksLikeSeverity ? formatSeverity(raw) : formatReviewStatus(raw);
+  const color =
+    text === "已发布"
+      ? "bg-emerald-600 text-white"
+      : text === "待人工复核"
+        ? "bg-amber-500 text-white"
+        : text === "已驳回"
+          ? "bg-rose-600 text-white"
+          : text === "已入库"
+            ? "bg-sky-600 text-white"
+            : looksLikeSeverity
+              ? severityTone(raw)
+              : "bg-slate-100 text-slate-700";
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded px-2 py-1 text-xs font-medium",
-        color[String(children)] ?? "bg-muted text-foreground",
-        className,
-      )}
-      {...props}
-    >
-      {children}
+    <span className={cn("inline-flex items-center rounded px-2 py-1 text-xs font-medium", color, className)} {...props}>
+      {text}
     </span>
   );
 }

@@ -6,7 +6,7 @@ export default function AiExtractPage() {
       <div>
         <h1 className="text-2xl font-semibold">AI 结构化抽取</h1>
         <p className="text-sm text-slate-500">
-          输入原始漏洞文本，查看 Triage / Extraction / Merge / Risk / Reviewer 多阶段 AI 分析结果。
+          输入原始漏洞文本，查看 AI 多阶段抽取、人工修订确认入库，以及离线评测质量。
         </p>
       </div>
       <AiExtractClient />

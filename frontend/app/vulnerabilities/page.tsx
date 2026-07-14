@@ -4,6 +4,7 @@ import { Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { api, Vulnerability } from "@/lib/api";
+import { formatVulnerabilityStatus } from "@/lib/presentation";
 
 type ListResponse = { items: Vulnerability[]; total: number; page: number; page_size: number };
 
@@ -20,98 +21,118 @@ export default async function VulnerabilitiesPage({
   const empty: ListResponse = { items: [], total: 0, page: 1, page_size: 20 };
   const data = await api<ListResponse>(`/vulnerabilities?${query}`).catch(() => empty);
 
+  const activeFilters = [
+    sp.q ? `关键词: ${sp.q}` : null,
+    sp.severity ? `等级: ${sp.severity}` : null,
+    sp.vuln_type ? `类型: ${sp.vuln_type}` : null,
+    sp.component ? `组件: ${sp.component}` : null,
+    sp.status ? `状态: ${sp.status}` : null,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">漏洞库</h1>
-          <p className="text-sm text-slate-500">支持搜索、筛选、详情查看、手动新增和 AI 导入。</p>
+          <p className="mt-1 text-sm text-slate-500">支持搜索、筛选、详情查看、人工维护和 AI 抽取入库，是平台最终的标准化漏洞资产面。</p>
         </div>
         <div className="flex gap-2">
-          <Link
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium"
-            href="/vulnerabilities/new"
-          >
+          <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium" href="/vulnerabilities/new">
             <Plus size={16} />
             手动新增
           </Link>
-          <Link className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white" href="/ai-extract">
-            AI 导入
+          <Link className="inline-flex h-9 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white" href="/ai-extract">
+            AI 抽取
           </Link>
         </div>
       </div>
 
-      <form className="grid grid-cols-6 gap-3 rounded-lg border border-border bg-white p-4">
-        <div className="col-span-2 flex items-center gap-2 rounded-md border border-border px-3">
-          <Search size={16} />
-          <input name="q" defaultValue={sp.q ?? ""} className="h-9 flex-1 outline-none" placeholder="标题、描述、组件" />
+      <form className="rounded-lg border border-border bg-white p-4 shadow-soft">
+        <div className="grid gap-3 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
+          <div className="flex items-center gap-2 rounded-md border border-border px-3">
+            <Search size={16} />
+            <input name="q" defaultValue={sp.q ?? ""} className="h-10 flex-1 bg-transparent text-sm outline-none" placeholder="搜索标题、描述、影响组件" />
+          </div>
+          <select name="severity" defaultValue={sp.severity ?? ""} className="h-10 rounded-md border border-border bg-white px-3 text-sm">
+            <option value="">全部等级</option>
+            <option value="严重">严重</option>
+            <option value="高危">高危</option>
+            <option value="中危">中危</option>
+            <option value="低危">低危</option>
+          </select>
+          <input name="vuln_type" defaultValue={sp.vuln_type ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="漏洞类型" />
+          <input name="component" defaultValue={sp.component ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="影响组件" />
+          <input name="status" defaultValue={sp.status ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="状态" />
+          <button className="inline-flex h-10 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white">筛选</button>
         </div>
-        <select name="severity" defaultValue={sp.severity ?? ""} className="rounded-md border border-border px-3 text-sm">
-          <option value="">全部等级</option>
-          <option value="严重">严重</option>
-          <option value="高危">高危</option>
-          <option value="中危">中危</option>
-          <option value="低危">低危</option>
-        </select>
-        <input
-          name="vuln_type"
-          defaultValue={sp.vuln_type ?? ""}
-          className="rounded-md border border-border px-3 text-sm outline-none"
-          placeholder="漏洞类型"
-        />
-        <input
-          name="component"
-          defaultValue={sp.component ?? ""}
-          className="rounded-md border border-border px-3 text-sm outline-none"
-          placeholder="影响组件"
-        />
-        <select name="status" defaultValue={sp.status ?? ""} className="rounded-md border border-border px-3 text-sm">
-          <option value="">全部状态</option>
-          <option value="未修复">未修复</option>
-          <option value="待确认">待确认</option>
-          <option value="已修复">已修复</option>
-          <option value="已忽略">已忽略</option>
-        </select>
-        <button className="col-span-6 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white md:col-span-1">筛选</button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {activeFilters.length > 0 ? (
+            activeFilters.map((filter) => (
+              <span key={filter} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+                {filter}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-slate-400">当前未设置筛选条件</span>
+          )}
+        </div>
       </form>
 
-      <Card className="p-0">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted text-left">
-              <th className="p-3">标题</th>
-              <th>类型</th>
-              <th>等级</th>
-              <th>评分</th>
-              <th>影响组件</th>
-              <th>状态</th>
-              <th>创建时间</th>
-              <th className="pr-3">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((vulnerability) => (
-              <tr key={vulnerability.id} className="border-b border-border last:border-0 hover:bg-muted">
-                <td className="p-3 font-medium">
-                  <Link href={`/vulnerabilities/${vulnerability.id}`}>{vulnerability.title}</Link>
-                </td>
-                <td>{vulnerability.vuln_type}</td>
-                <td>
-                  <Badge>{vulnerability.severity}</Badge>
-                </td>
-                <td>{vulnerability.score}</td>
-                <td>{vulnerability.affected_component}</td>
-                <td>{vulnerability.status}</td>
-                <td>{new Date(vulnerability.created_at).toLocaleString()}</td>
-                <td className="pr-3">
-                  <Link className="text-primary hover:underline" href={`/vulnerabilities/${vulnerability.id}`}>
-                    查看 / 编辑
-                  </Link>
-                </td>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <div className="text-sm text-slate-500">结果总数</div>
+          <div className="mt-3 text-3xl font-semibold">{data.total}</div>
+        </Card>
+        <Card>
+          <div className="text-sm text-slate-500">当前页</div>
+          <div className="mt-3 text-3xl font-semibold">{data.page}</div>
+        </Card>
+        <Card>
+          <div className="text-sm text-slate-500">每页条数</div>
+          <div className="mt-3 text-3xl font-semibold">{data.page_size}</div>
+        </Card>
+      </div>
+
+      <Card className="overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1100px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border bg-slate-50 text-left text-slate-500">
+                <th className="p-3 font-medium">标题</th>
+                <th className="font-medium">类型</th>
+                <th className="font-medium">等级</th>
+                <th className="font-medium">评分</th>
+                <th className="font-medium">影响组件</th>
+                <th className="font-medium">状态</th>
+                <th className="font-medium">创建时间</th>
+                <th className="pr-3 font-medium">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.items.map((vulnerability) => (
+                <tr key={vulnerability.id} className="border-b border-border last:border-0 hover:bg-slate-50">
+                  <td className="p-3">
+                    <Link href={`/vulnerabilities/${vulnerability.id}`} className="block">
+                      <div className="max-w-[320px] truncate font-medium text-slate-900">{vulnerability.title}</div>
+                      <div className="mt-1 text-xs text-slate-500">{vulnerability.tags.slice(0, 3).join("、") || "暂无标签"}</div>
+                    </Link>
+                  </td>
+                  <td>{vulnerability.vuln_type}</td>
+                  <td><Badge>{vulnerability.severity}</Badge></td>
+                  <td className="font-semibold text-slate-900">{vulnerability.score}</td>
+                  <td>{vulnerability.affected_component}</td>
+                  <td>{formatVulnerabilityStatus(vulnerability.status)}</td>
+                  <td>{new Date(vulnerability.created_at).toLocaleString()}</td>
+                  <td className="pr-3">
+                    <Link className="text-primary hover:underline" href={`/vulnerabilities/${vulnerability.id}`}>
+                      查看详情
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
       <div className="text-sm text-slate-500">共 {data.total} 条漏洞记录</div>
     </div>

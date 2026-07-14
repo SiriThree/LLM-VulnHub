@@ -10,23 +10,27 @@ from app.core.config import get_settings
 
 AI_KEYWORDS = [
     "llm",
+    "large language model",
     "大模型",
+    "模型",
     "prompt",
     "rag",
     "agent",
-    "插件",
     "plugin",
     "embedding",
-    "模型",
     "知识库",
     "langchain",
     "llamaindex",
+    "autogen",
+    "crewai",
     "retriever",
     "tool",
     "browser",
     "routing",
     "evaluation",
+    "mcp",
 ]
+
 VULN_KEYWORDS = [
     "漏洞",
     "泄露",
@@ -41,14 +45,14 @@ VULN_KEYWORDS = [
     "exploit",
     "exfiltration",
     "permission",
-    "acl",
-    "scope",
     "unauthorized",
     "privileged",
     "tenant",
-    "manifest",
     "exposure",
+    "advisory",
+    "security issue",
 ]
+
 SECURITY_PATTERNS = [
     "untrusted",
     "unauthorized",
@@ -63,7 +67,14 @@ SECURITY_PATTERNS = [
     "privilege escalation",
     "data exposure",
     "malicious input",
+    "cross-tenant",
+    "supply chain",
+    "ssrf",
+    "sql injection",
+    "path traversal",
+    "rce",
 ]
+
 NEGATIVE_PATTERNS = [
     "没有安全漏洞",
     "无安全漏洞",
@@ -75,6 +86,38 @@ NEGATIVE_PATTERNS = [
     "no security issue",
     "does not describe any exploit",
     "does not describe any exploit or bypass",
+    "feature announcement",
+    "general availability",
+    "launch",
+    "launches",
+    "newsroom",
+    "customer story",
+    "release notes",
+    "changelog",
+    "tutorial",
+    "getting started",
+    "benchmark",
+    "enterprise deployment",
+]
+
+NOISE_PATTERNS = [
+    "release notes",
+    "changelog",
+    "launches",
+    "announces",
+    "newsroom",
+    "tutorial",
+    "getting started",
+    "benchmark",
+    "one click",
+    "employees",
+    "feature announcement",
+    "spend controls",
+    "partnership",
+    "customer story",
+    "case study",
+    "webinar",
+    "native-speed",
 ]
 
 
@@ -88,6 +131,17 @@ class ProviderConfig:
     api_key: str | None
     base_url: str
     model: str
+
+
+@dataclass(frozen=True)
+class ProviderStatus:
+    configured_provider: str
+    active_provider: str
+    model: str
+    has_api_key: bool
+    fallback_enabled: bool
+    using_mock: bool
+    can_call_remote: bool
 
 
 class LLMClient:
@@ -106,6 +160,23 @@ class LLMClient:
             return ProviderConfig("deepseek", self.settings.deepseek_api_key, self.settings.deepseek_base_url, self.settings.deepseek_model)
         return ProviderConfig("mock", None, "", "mock-heuristic")
 
+    def provider_status(self) -> ProviderStatus:
+        provider = self._provider_config()
+        configured_provider = self.settings.llm_provider.lower()
+        has_api_key = bool(provider.api_key)
+        can_call_remote = provider.name != "mock" and has_api_key
+        active_provider = provider.name if can_call_remote or provider.name == "mock" else ("mock" if self.settings.llm_fallback_to_mock else provider.name)
+        model = provider.model if active_provider != "mock" else "mock-heuristic"
+        return ProviderStatus(
+            configured_provider=configured_provider,
+            active_provider=active_provider,
+            model=model,
+            has_api_key=has_api_key,
+            fallback_enabled=self.settings.llm_fallback_to_mock,
+            using_mock=active_provider == "mock",
+            can_call_remote=can_call_remote,
+        )
+
     async def chat_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
         provider = self._provider_config()
         if provider.name != "mock" and provider.api_key:
@@ -115,14 +186,36 @@ class LLMClient:
                     messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                     response_format={"type": "json_object"},
                 )
-                return self._parse_json_content(content)
-            except Exception:
+                payload = self._parse_json_content(content)
+                payload["_provider"] = {
+                    "configured_provider": provider.name,
+                    "active_provider": provider.name,
+                    "model": provider.model,
+                    "fallback_reason": None,
+                }
+                return payload
+            except Exception as exc:
                 if not self.settings.llm_fallback_to_mock:
                     raise
+                payload = self._mock_json(system_prompt, user_prompt)
+                payload["_provider"] = {
+                    "configured_provider": provider.name,
+                    "active_provider": "mock",
+                    "model": "mock-heuristic",
+                    "fallback_reason": str(exc),
+                }
+                return payload
         elif provider.name != "mock" and not provider.api_key and not self.settings.llm_fallback_to_mock:
             raise LLMProviderError(f"{provider.name} provider selected but API key is missing.")
 
-        return self._mock_json(system_prompt, user_prompt)
+        payload = self._mock_json(system_prompt, user_prompt)
+        payload["_provider"] = {
+            "configured_provider": provider.name,
+            "active_provider": "mock",
+            "model": "mock-heuristic",
+            "fallback_reason": f"{provider.name} provider is not available or API key is missing." if provider.name != "mock" else None,
+        }
+        return payload
 
     async def chat_text(self, system_prompt: str, user_prompt: str) -> str:
         provider = self._provider_config()
@@ -200,6 +293,8 @@ class LLMClient:
             ai_hit = any(keyword in text for keyword in AI_KEYWORDS)
             vuln_hit = any(keyword in text for keyword in VULN_KEYWORDS)
             security_hit = any(pattern in text for pattern in SECURITY_PATTERNS)
+            advisory_hit = any(phrase in text for phrase in ["ghsa-", "cve-", "advisory", "security advisory"])
+            noise_hit = any(phrase in text for phrase in NOISE_PATTERNS)
             strong_context_hit = any(
                 phrase in text
                 for phrase in [
@@ -212,9 +307,12 @@ class LLMClient:
                     "privileged tools",
                     "fallback model",
                     "debug traces",
+                    "graphcypherqachain",
+                    "retrieval pipeline",
                 ]
             )
-            hit = (not has_negative) and ai_hit and (vuln_hit or security_hit or strong_context_hit)
+            hit = (not has_negative) and (not noise_hit) and ai_hit and (vuln_hit or security_hit or advisory_hit or strong_context_hit)
+
             if "prompt" in text or "注入" in text:
                 area = "Prompt Injection"
             elif "rag" in text or "knowledge" in text or "知识库" in text:
@@ -227,11 +325,12 @@ class LLMClient:
                 area = "Model Routing Misconfiguration"
             else:
                 area = "LLM Application Security"
+
             return {
                 "is_ai_vulnerability": hit,
-                "confidence": 0.92 if vuln_hit and hit else 0.84 if (security_hit or strong_context_hit) and hit else 0.12,
+                "confidence": 0.95 if advisory_hit and hit else 0.92 if vuln_hit and hit else 0.84 if (security_hit or strong_context_hit) and hit else 0.08,
                 "related_area": area if hit else "unknown",
-                "reason": "The text contains AI-system context together with security-impact vocabulary." if hit else "The text does not clearly describe an AI-related vulnerability.",
+                "reason": "The text contains AI-system context together with explicit security-impact or advisory language." if hit else "The text does not clearly describe an AI security vulnerability or advisory.",
             }
 
         if "risk_reason" in user_prompt and "priority" in user_prompt:
@@ -255,7 +354,7 @@ class LLMClient:
             return {
                 "should_merge": False,
                 "candidate_ids": ids[:1] if ids and "same vulnerability" in prompt_lower else [],
-                "reason": "The candidate appears related, but should remain manual-review unless the exploit path and affected component fully match.",
+                "reason": "The candidate appears related, but should remain manual review unless the exploit path and affected component fully match.",
                 "confidence": 0.45 if ids else 0.0,
             }
 
@@ -298,7 +397,7 @@ class LLMClient:
             "attack_method": "The attacker injects malicious content through prompts, external documents, web pages, or tool output to manipulate model behavior.",
             "impact": "This may lead to prompt leakage, unauthorized tool execution, cross-tenant data access, or sensitive knowledge-base exposure.",
             "mitigation": "Isolate instructions from external content, enforce tool authorization, add retrieval filtering, and audit model outputs before action.",
-            "tags": [vuln_type, component.split('/')[0].strip()],
+            "tags": [vuln_type, component.split("/")[0].strip()],
         }
 
     def _mock_text(self, prompt: str) -> str:

@@ -41,6 +41,9 @@ def mark_task_dead_letter(db: Session, task: Task, reason: str | None = None) ->
 
 
 def get_ops_metrics(db: Session) -> dict:
+    mock_providers = {"mock"}
+    mock_models = {"mock-heuristic", "mock"}
+
     queue_metrics = {
         "queued": db.scalar(select(func.count()).select_from(Task).where(Task.status == "queued")) or 0,
         "running": db.scalar(select(func.count()).select_from(Task).where(Task.status == "running")) or 0,
@@ -63,7 +66,8 @@ def get_ops_metrics(db: Session) -> dict:
     scores: list[int] = []
     for job in jobs:
         provider = job.provider_name or "unknown"
-        provider_distribution[provider] = provider_distribution.get(provider, 0) + 1
+        if provider not in mock_providers:
+            provider_distribution[provider] = provider_distribution.get(provider, 0) + 1
         if job.severity:
             severity_distribution[job.severity] = severity_distribution.get(job.severity, 0) + 1
         if job.score is not None:
@@ -79,8 +83,10 @@ def get_ops_metrics(db: Session) -> dict:
     for execution in agent_executions:
         provider = execution.provider_name or "unknown"
         model = execution.model_name or "unknown"
-        llm_provider_distribution[provider] = llm_provider_distribution.get(provider, 0) + 1
-        model_distribution[model] = model_distribution.get(model, 0) + 1
+        if provider not in mock_providers:
+            llm_provider_distribution[provider] = llm_provider_distribution.get(provider, 0) + 1
+        if model not in mock_models:
+            model_distribution[model] = model_distribution.get(model, 0) + 1
         total_prompt_tokens += execution.prompt_tokens or 0
         total_completion_tokens += execution.completion_tokens or 0
         total_tokens += execution.total_tokens or 0
