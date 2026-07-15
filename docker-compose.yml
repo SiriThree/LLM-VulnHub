@@ -17,13 +17,20 @@ services:
       - "6379:6379"
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+        HTTP_PROXY: ${MODEL_DOWNLOAD_PROXY:-}
+        HTTPS_PROXY: ${MODEL_DOWNLOAD_PROXY:-}
     environment:
       DATABASE_URL: postgresql+psycopg://llm_vulnhub:llm_vulnhub@postgres:5432/llm_vulnhub
       REDIS_URL: redis://redis:6379/0
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      EMBEDDING_CACHE_DIR: /models/fastembed
     ports:
       - "8001:8000"
     volumes:
@@ -33,7 +40,12 @@ services:
       - redis
 
   worker:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+        HTTP_PROXY: ${MODEL_DOWNLOAD_PROXY:-}
+        HTTPS_PROXY: ${MODEL_DOWNLOAD_PROXY:-}
     command: celery -A app.worker.celery_app worker --loglevel=info
     environment:
       DATABASE_URL: postgresql+psycopg://llm_vulnhub:llm_vulnhub@postgres:5432/llm_vulnhub
@@ -41,6 +53,8 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      EMBEDDING_CACHE_DIR: /models/fastembed
     volumes:
       - ./data:/data:ro
     depends_on:
@@ -48,7 +62,12 @@ services:
       - redis
 
   beat:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+        HTTP_PROXY: ${MODEL_DOWNLOAD_PROXY:-}
+        HTTPS_PROXY: ${MODEL_DOWNLOAD_PROXY:-}
     command: celery -A app.worker.celery_app beat --loglevel=info
     environment:
       DATABASE_URL: postgresql+psycopg://llm_vulnhub:llm_vulnhub@postgres:5432/llm_vulnhub

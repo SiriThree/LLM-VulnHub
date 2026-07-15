@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     default_actor: str = "local-admin"
     default_role: str = "admin"
 
-    embedding_dim: int = 64
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_cache_dir: str = "./.cache/fastembed"
+    embedding_dim: int = 384
     duplicate_similarity_threshold: float = 0.88
     celery_worker_concurrency: int = 2
     celery_task_prefetch_multiplier: int = 1
