@@ -388,8 +388,11 @@ export type CollectorRecentRun = {
   status: string;
   stage: string;
   discovered: number;
+  prefilter_passed: number;
   processed: number;
   queued_analysis: number;
+  analyzed: number;
+  ai_related: number;
   saved: number;
   duplicates: number;
   pending_review: number;
@@ -419,6 +422,16 @@ export type SourceHealth = {
   recent_run_count: number;
   recent_failure_count: number;
   success_rate: number;
+  request_success_rate: number;
+  prefilter_pass_rate: number;
+  llm_hit_rate: number;
+  library_conversion_rate: number;
+  recent_discovered: number;
+  recent_prefilter_passed: number;
+  recent_queued_analysis: number;
+  recent_analyzed: number;
+  recent_ai_related: number;
+  recent_saved: number;
   freshness_minutes?: number | null;
   signals: string[];
 };

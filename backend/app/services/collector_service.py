@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 import hashlib
 import json
 import threading
@@ -12,6 +13,7 @@ import httpx
 from bs4 import BeautifulSoup
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import get_settings
 from app.db.models import CollectedDocument, DataSource, IntelligenceItem, MergeCandidate, Task, Vulnerability
@@ -43,20 +45,40 @@ TASK_STAGE_ORDER = [
 AI_CONTEXT_TERMS = {
     "llm",
     "large language model",
+    "large-language-model",
     "prompt",
+    "prompt injection",
     "rag",
     "agent",
+    "ai agent",
     "langchain",
     "llamaindex",
+    "llama-index",
     "autogen",
     "crewai",
     "haystack",
     "mcp",
+    "model context protocol",
     "tool calling",
+    "function calling",
     "model context",
     "embedding",
     "vector database",
+    "vector store",
     "inference",
+    "transformers",
+    "hugging face",
+    "huggingface",
+    "vllm",
+    "ollama",
+    "open-webui",
+    "gradio",
+    "ray serve",
+    "chroma",
+    "chromadb",
+    "milvus",
+    "weaviate",
+    "qdrant",
 }
 
 SECURITY_SIGNAL_TERMS = {
@@ -86,6 +108,33 @@ SECURITY_SIGNAL_TERMS = {
     "tool abuse",
     "model poisoning",
     "cypher injection",
+}
+
+LLM_COMPONENT_TERMS = {
+    "langchain",
+    "llamaindex",
+    "llama-index",
+    "llama_index",
+    "autogen",
+    "crewai",
+    "haystack",
+    "transformers",
+    "huggingface",
+    "hugging face",
+    "vllm",
+    "ollama",
+    "open-webui",
+    "gradio",
+    "ray",
+    "ray serve",
+    "mcp",
+    "model context protocol",
+    "chroma",
+    "chromadb",
+    "milvus",
+    "weaviate",
+    "qdrant",
+    "n8n-mcp",
 }
 
 NOISE_SIGNAL_TERMS = {
@@ -131,11 +180,14 @@ def _prefilter_candidate(source: DataSource, item: dict[str, str]) -> tuple[bool
     combined = f"{title}\n{raw_text[:4000]}"
 
     ai_hit = any(term in combined for term in AI_CONTEXT_TERMS)
+    component_hit = any(term in combined for term in LLM_COMPONENT_TERMS)
     security_hit = any(term in combined for term in SECURITY_SIGNAL_TERMS)
     noise_hit = any(term in title for term in NOISE_SIGNAL_TERMS)
 
-    if not ai_hit and source.source_type != "github":
-        return False, "Missing AI security context."
+    if not ai_hit and not component_hit:
+        return False, "Missing LLM/RAG/Agent security context."
+    if source.source_type == "github" and not component_hit and not ai_hit:
+        return False, "Generic GitHub advisory without LLM component signal."
     if not security_hit:
         return False, "Missing explicit security or vulnerability signal."
     if noise_hit and "security" not in title and "advisory" not in title and "vulnerability" not in title:
@@ -186,8 +238,11 @@ def get_collector_overview(db: Session) -> dict[str, Any]:
                     "status": str(run.get("status") or task.status),
                     "stage": str(run.get("stage") or (task.output_data or {}).get("current_stage") or "queued"),
                     "discovered": int(run.get("discovered", 0) or 0),
+                    "prefilter_passed": int(run.get("prefilter_passed", 0) or 0),
                     "processed": int(run.get("processed", 0) or 0),
                     "queued_analysis": int(run.get("queued_analysis", 0) or 0),
+                    "analyzed": int(run.get("analyzed", 0) or 0),
+                    "ai_related": int(run.get("ai_related", 0) or 0),
                     "saved": int(run.get("saved", 0) or 0),
                     "duplicates": int(run.get("duplicates", 0) or 0),
                     "pending_review": int(run.get("pending_review", 0) or 0),
@@ -335,6 +390,7 @@ def _ensure_intelligence_item_for_document(
 def _empty_metrics() -> dict[str, int]:
     return {
         "discovered": 0,
+        "prefilter_passed": 0,
         "processed": 0,
         "queued_analysis": 0,
         "analyzed": 0,
@@ -440,6 +496,21 @@ def _base_notification_output(event_type: str, trigger: str, payload: dict[str, 
     }
 
 
+def _get_required_task_int(task: Task, field_name: str) -> int | None:
+    raw_value = (task.input_data or {}).get(field_name)
+    if raw_value in (None, ""):
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_exception_message(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
 def create_collection_task(db: Session, source_id: int | None, trigger: str = "manual") -> Task:
     task = Task(
         task_type="crawl",
@@ -493,9 +564,10 @@ def create_notification_task(db: Session, event_type: str, payload: dict[str, An
 
 
 def _merge_output(task: Task, db: Session, patch: dict[str, Any]) -> None:
-    output = dict(task.output_data or {})
+    output = deepcopy(task.output_data or {})
     output.update(patch)
     task.output_data = output
+    flag_modified(task, "output_data")
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -515,7 +587,7 @@ def _mark_dead_letter_if_needed(task: Task, db: Session, reason: str | None = No
 
 
 def _append_stage(task: Task, db: Session, stage: str, status: str, message: str, extra: dict[str, Any] | None = None) -> None:
-    output = dict(task.output_data or {})
+    output = deepcopy(task.output_data or {})
     history = list(output.get("stage_history", []))
     history.append(
         {
@@ -530,25 +602,27 @@ def _append_stage(task: Task, db: Session, stage: str, status: str, message: str
     output["current_stage"] = stage
     output["last_message"] = message
     task.output_data = output
+    flag_modified(task, "output_data")
     db.add(task)
     db.commit()
     db.refresh(task)
 
 
 def _update_metrics(task: Task, db: Session, **delta: int) -> None:
-    output = dict(task.output_data or {})
+    output = deepcopy(task.output_data or {})
     metrics = {**_empty_metrics(), **output.get("metrics", {})}
     for key, value in delta.items():
         metrics[key] = metrics.get(key, 0) + value
     output["metrics"] = metrics
     task.output_data = output
+    flag_modified(task, "output_data")
     db.add(task)
     db.commit()
     db.refresh(task)
 
 
 def _upsert_source_run(task: Task, db: Session, source: DataSource, patch: dict[str, Any]) -> None:
-    output = dict(task.output_data or {})
+    output = deepcopy(task.output_data or {})
     runs = list(output.get("source_runs", []))
     existing = next((item for item in runs if item.get("source_id") == source.id), None)
     if existing is None:
@@ -560,8 +634,11 @@ def _upsert_source_run(task: Task, db: Session, source: DataSource, patch: dict[
             "status": "queued",
             "stage": "queued",
             "discovered": 0,
+            "prefilter_passed": 0,
             "processed": 0,
             "queued_analysis": 0,
+            "analyzed": 0,
+            "ai_related": 0,
             "saved": 0,
             "duplicates": 0,
             "pending_review": 0,
@@ -582,9 +659,42 @@ def _upsert_source_run(task: Task, db: Session, source: DataSource, patch: dict[
             existing[key] = value
     output["source_runs"] = runs
     task.output_data = output
+    flag_modified(task, "output_data")
     db.add(task)
     db.commit()
     db.refresh(task)
+
+
+def _record_source_analysis_result(db: Session, source_id: int | None, *, is_related: bool, document_status: str) -> None:
+    if source_id is None:
+        return
+    source = db.get(DataSource, source_id)
+    if not source:
+        return
+    crawl_tasks = db.scalars(select(Task).where(Task.task_type == "crawl").order_by(Task.created_at.desc())).all()
+    for crawl_task in crawl_tasks:
+        source_run = next(
+            (run for run in (crawl_task.output_data or {}).get("source_runs", []) if run.get("source_id") == source_id),
+            None,
+        )
+        if not source_run:
+            continue
+        patch: dict[str, Any] = {
+            "analyzed": int(source_run.get("analyzed", 0) or 0) + 1,
+            "event": {
+                "stage": "analysis_result",
+                "message": f"Analysis result recorded: {document_status}",
+                "is_ai_related": is_related,
+            },
+        }
+        if is_related:
+            patch["ai_related"] = int(source_run.get("ai_related", 0) or 0) + 1
+        if document_status == "pending_review":
+            patch["pending_review"] = int(source_run.get("pending_review", 0) or 0) + 1
+        if document_status == "stored":
+            patch["saved"] = int(source_run.get("saved", 0) or 0) + 1
+        _upsert_source_run(crawl_task, db, source, patch)
+        return
 
 
 async def fetch_candidates(source: DataSource) -> list[dict[str, str]]:
@@ -608,11 +718,30 @@ async def fetch_candidates(source: DataSource) -> list[dict[str, str]]:
         "User-Agent": "LLM-VulnHub/0.1",
         "Accept": "application/json, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.7",
     }
-    if settings.github_token:
+    if settings.github_token and (source.source_type == "github" or "api.github.com" in source.url):
         headers["Authorization"] = f"Bearer {settings.github_token}"
 
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=headers) as client:
-        resp = await client.get(source.url)
+    async with httpx.AsyncClient(timeout=45, follow_redirects=True, headers=headers) as client:
+        async def get_with_retry(url: str) -> httpx.Response:
+            last_exc: Exception | None = None
+            for attempt in range(3):
+                try:
+                    response = await client.get(url)
+                    if response.status_code < 500:
+                        return response
+                    last_exc = RuntimeError(f"HTTP {response.status_code}")
+                except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                    last_exc = exc
+                if attempt < 2:
+                    await asyncio.sleep(0.8 * (attempt + 1))
+            if last_exc:
+                raise last_exc
+            raise RuntimeError("source request failed")
+
+        resp = await get_with_retry(source.url)
+        if resp.status_code == 404 and source.source_type == "rss" and "github.com/" in source.url and source.url.endswith("/releases.atom"):
+            fallback_url = source.url.removesuffix("/releases.atom") + "/tags.atom"
+            resp = await get_with_retry(fallback_url)
         if source.source_type == "github" and resp.status_code == 403:
             if not settings.github_token:
                 raise RuntimeError("GitHub advisory source hit the anonymous rate limit. Set GITHUB_TOKEN to enable stable collection.")
@@ -825,6 +954,9 @@ async def run_notification_task(task_id: int) -> dict[str, Any]:
         task = db.get(Task, task_id)
         if not task:
             return {"task_id": task_id, "status": "missing"}
+        output = dict(task.output_data or {})
+        if task.status == "success" and output.get("current_stage") == "completed":
+            return {"task_id": task.id, "status": task.status, "notification": output.get("notification", {})}
         return await _run_notification(db, task)
     finally:
         db.close()
@@ -899,7 +1031,21 @@ async def _run_analysis(db: Session, task: Task) -> dict[str, Any]:
     db.commit()
     db.refresh(task)
 
-    document_id = int((task.input_data or {}).get("document_id"))
+    document_id = _get_required_task_int(task, "document_id")
+    if document_id is None:
+        task.status = "failed"
+        task.error_message = "invalid task payload: missing document_id"
+        _append_stage(
+            task,
+            db,
+            "completed",
+            "failed",
+            "Analysis task payload is invalid: missing document_id.",
+            {"task_input": dict(task.input_data or {})},
+        )
+        _mark_dead_letter_if_needed(task, db, "invalid task payload: missing document_id")
+        return {"task_id": task.id, "status": task.status}
+
     doc = db.get(CollectedDocument, document_id)
     if not doc:
         task.status = "failed"
@@ -1014,6 +1160,8 @@ async def _run_analysis(db: Session, task: Task) -> dict[str, Any]:
         output["auto_published"] = auto_published
         task.output_data = output
         task.status = "success"
+        _update_metrics(task, db, analyzed=1, saved=1 if doc.status == "stored" else 0, pending_review=1 if doc.status == "pending_review" else 0, ignored=1 if doc.status == "ignored" else 0)
+        _record_source_analysis_result(db, doc.source_id, is_related=is_related, document_status=doc.status)
         _append_stage(task, db, "completed", "success", f"Analysis completed for document #{doc.id}.", {"document_id": doc.id, "intel_item_id": intel_item.id})
 
         if doc.status == "pending_review":
@@ -1083,7 +1231,21 @@ async def _run_review(db: Session, task: Task) -> dict[str, Any]:
     db.commit()
     db.refresh(task)
 
-    intel_item_id = int((task.input_data or {}).get("intel_item_id"))
+    intel_item_id = _get_required_task_int(task, "intel_item_id")
+    if intel_item_id is None:
+        task.status = "failed"
+        task.error_message = "invalid task payload: missing intel_item_id"
+        _append_stage(
+            task,
+            db,
+            "completed",
+            "failed",
+            "Review task payload is invalid: missing intel_item_id.",
+            {"task_input": dict(task.input_data or {})},
+        )
+        _mark_dead_letter_if_needed(task, db, "invalid task payload: missing intel_item_id")
+        return {"task_id": task.id, "status": task.status}
+
     intel_item = db.get(IntelligenceItem, intel_item_id)
     if not intel_item:
         task.status = "failed"
@@ -1211,6 +1373,7 @@ async def _process_source(db: Session, task: Task, source: DataSource) -> None:
             },
         )
     except Exception as exc:
+        error_message = _format_exception_message(exc)
         _update_metrics(task, db, failed=1)
         _update_metrics(task, db, notifications=1)
         notification_task = create_notification_task(
@@ -1220,7 +1383,7 @@ async def _process_source(db: Session, task: Task, source: DataSource) -> None:
                 "source_id": source.id,
                 "title": source.name,
                 "severity": "warning",
-                "message": str(exc),
+                "message": error_message,
                 "url": source.url,
             },
             trigger="collector",
@@ -1236,8 +1399,8 @@ async def _process_source(db: Session, task: Task, source: DataSource) -> None:
                 "failed": 1,
                 "finished_at": utcnow().isoformat(),
                 "elapsed_seconds": round((utcnow() - started_at).total_seconds(), 2),
-                "error": str(exc),
-                "event": {"stage": "failed", "message": str(exc)},
+                "error": error_message,
+                "event": {"stage": "failed", "message": error_message},
             },
         )
 
@@ -1270,6 +1433,26 @@ async def _process_candidate(db: Session, task: Task, source: DataSource, item: 
             },
         )
         return
+
+    _update_metrics(task, db, prefilter_passed=1)
+    current_run = next(
+        (run for run in (task.output_data or {}).get("source_runs", []) if run.get("source_id") == source.id),
+        None,
+    )
+    _upsert_source_run(
+        task,
+        db,
+        source,
+        {
+            "prefilter_passed": (current_run or {}).get("prefilter_passed", 0) + 1,
+            "stage": "deduplicating",
+            "event": {
+                "stage": "prefilter",
+                "message": f"Prefilter passed: {title}",
+                "reason": prefilter_reason,
+            },
+        },
+    )
 
     doc_hash = content_hash(raw_text)
 

@@ -255,6 +255,17 @@ export default function CollectorsPage() {
                 <div>去重命中 {source.duplicate_documents}</div>
                 <div>成功率 {Math.round(source.success_rate * 100)}%</div>
               </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                <div>请求成功 {Math.round(source.request_success_rate * 100)}%</div>
+                <div>初筛通过 {Math.round(source.prefilter_pass_rate * 100)}%</div>
+                <div>LLM 命中 {Math.round(source.llm_hit_rate * 100)}%</div>
+                <div>入库转化 {Math.round(source.library_conversion_rate * 100)}%</div>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-500">
+                <div>候选 {source.recent_discovered}</div>
+                <div>初筛 {source.recent_prefilter_passed}</div>
+                <div>入库 {source.recent_saved}</div>
+              </div>
               <div className="mt-3 text-xs text-slate-400">
                 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
                 {source.freshness_minutes != null ? ` | 距今 ${source.freshness_minutes} min` : ""}
@@ -267,7 +278,7 @@ export default function CollectorsPage() {
                 ))}
               </div>
               <div className="mt-4">
-                <Button className="h-8" onClick={() => run(source.source_id)} disabled={submitting}>
+                <Button className="h-8" onClick={() => run(source.source_id)} disabled={submitting || !source.enabled}>
                   <Play size={14} />
                   立即采集
                 </Button>

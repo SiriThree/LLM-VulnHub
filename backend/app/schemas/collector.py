@@ -67,8 +67,11 @@ class CollectorRecentRunRead(BaseModel):
     status: str
     stage: str
     discovered: int
+    prefilter_passed: int = 0
     processed: int
     queued_analysis: int
+    analyzed: int = 0
+    ai_related: int = 0
     saved: int
     duplicates: int
     pending_review: int
@@ -98,6 +101,16 @@ class SourceHealthRead(BaseModel):
     recent_run_count: int
     recent_failure_count: int
     success_rate: float
+    request_success_rate: float = 0.0
+    prefilter_pass_rate: float = 0.0
+    llm_hit_rate: float = 0.0
+    library_conversion_rate: float = 0.0
+    recent_discovered: int = 0
+    recent_prefilter_passed: int = 0
+    recent_queued_analysis: int = 0
+    recent_analyzed: int = 0
+    recent_ai_related: int = 0
+    recent_saved: int = 0
     freshness_minutes: int | None = None
     signals: list[str] = []
 

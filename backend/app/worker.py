@@ -10,6 +10,7 @@ celery_app = Celery("llm_vulnhub", broker=settings.redis_url, backend=settings.r
 celery_app.conf.timezone = "Asia/Shanghai"
 celery_app.conf.task_default_queue = "default"
 celery_app.conf.broker_connection_retry_on_startup = True
+celery_app.conf.worker_prefetch_multiplier = settings.celery_task_prefetch_multiplier
 celery_app.conf.task_queues = (
     Queue("default"),
     Queue("ingestion"),
@@ -34,6 +35,8 @@ celery_app.conf.beat_schedule = {
 if os.name == "nt":
     celery_app.conf.worker_pool = "solo"
     celery_app.conf.worker_concurrency = 1
+else:
+    celery_app.conf.worker_concurrency = settings.celery_worker_concurrency
 
 
 @celery_app.task(

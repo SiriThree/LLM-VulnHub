@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     embedding_dim: int = 64
     duplicate_similarity_threshold: float = 0.88
+    celery_worker_concurrency: int = 2
+    celery_task_prefetch_multiplier: int = 1
 
     model_config = SettingsConfigDict(
         env_file=(
