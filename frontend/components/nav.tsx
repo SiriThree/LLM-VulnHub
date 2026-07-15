@@ -49,7 +49,7 @@ const groups = [
     title: "系统",
     items: [
       { href: "/settings", label: "设置", icon: Settings },
-      { href: "http://localhost:8000/docs", label: "OpenAPI", icon: FileSearch },
+      { href: "http://localhost:8001/docs", label: "OpenAPI", icon: FileSearch },
     ],
   },
 ];

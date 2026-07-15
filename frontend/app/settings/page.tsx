@@ -23,7 +23,7 @@ export default function SettingsPage() {
             "DEEPSEEK_API_KEY=...",
             "DATABASE_URL=postgresql+psycopg://...",
             "REDIS_URL=redis://redis:6379/0",
-            "NEXT_PUBLIC_API_BASE=http://localhost:8000/api/v1",
+            "NEXT_PUBLIC_API_BASE=http://localhost:8001/api/v1",
             "DEFAULT_ACTOR=local-admin",
             "DEFAULT_ROLE=admin",
           ].map((item) => (
