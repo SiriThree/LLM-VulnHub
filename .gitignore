@@ -13,3 +13,8 @@ out/
 dist/
 
 postgres_data/
+AGENTS.md
+docker-compose.yml
+
+.codex/auth.json
+.codex/config.toml
