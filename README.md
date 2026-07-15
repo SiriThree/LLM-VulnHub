@@ -297,16 +297,6 @@ GITHUB_TOKEN=your_token
 - AI 抽取前端：[D:\2025-2026-3\frontend\components\ai-extract-client.tsx](D:\2025-2026-3\frontend\components\ai-extract-client.tsx)
 - 情报池前端：[D:\2025-2026-3\frontend\components\intel-pool-client.tsx](D:\2025-2026-3\frontend\components\intel-pool-client.tsx)
 
-## 11. 相关文档
 
-- 2.0 设计报告：[D:\2025-2026-3\docs\LLM-VulnHub-2.0-Design-Report.md](D:\2025-2026-3\docs\LLM-VulnHub-2.0-Design-Report.md)
-- 2.0 开发清单：[D:\2025-2026-3\docs\LLM-VulnHub-2.0-Development-Checklist.md](D:\2025-2026-3\docs\LLM-VulnHub-2.0-Development-Checklist.md)
-- Phase 2 评估指南：[D:\2025-2026-3\docs\Phase2-Evaluation-Guide.md](D:\2025-2026-3\docs\Phase2-Evaluation-Guide.md)
 
-## 12. 后续建议
 
-如果下一步继续打磨，我建议优先做这三件事：
-
-1. 提升动态采集吞吐与任务可观测性，解决“慢”和“卡住”的体验问题。
-2. 继续优化情报预过滤与审核策略，提升真正可发布漏洞的占比。
-3. 补齐 README 截图、接口示例和一键演示脚本，让项目更适合展示和面试讲解。
