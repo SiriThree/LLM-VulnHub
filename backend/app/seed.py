@@ -126,11 +126,67 @@ DEFAULT_SOURCES = [
         "source_type": "github",
         "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&per_page=30",
         "interval_minutes": 180,
+        "enabled": False,
     },
     {
         "name": "GitHub Global Advisories - npm",
         "source_type": "github",
         "url": "https://api.github.com/advisories?type=reviewed&ecosystem=npm&per_page=30",
+        "interval_minutes": 180,
+        "enabled": False,
+    },
+    {
+        "name": "GitHub Advisory - LangChain",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&affects=langchain&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - LlamaIndex",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&affects=llama-index&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - Transformers",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&affects=transformers&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - Gradio",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&affects=gradio&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - vLLM",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&affects=vllm&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - ChromaDB",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=pip&affects=chromadb&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - LangChain JS",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=npm&affects=%40langchain%2Fcore&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - MCP SDK JS",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=npm&affects=%40modelcontextprotocol%2Fsdk&per_page=20",
+        "interval_minutes": 180,
+    },
+    {
+        "name": "GitHub Advisory - n8n MCP",
+        "source_type": "github",
+        "url": "https://api.github.com/advisories?type=reviewed&ecosystem=npm&affects=n8n-mcp&per_page=20",
         "interval_minutes": 180,
     },
     {
@@ -180,24 +236,28 @@ DEFAULT_SOURCES = [
         "source_type": "web",
         "url": "https://openai.com/news/security/",
         "interval_minutes": 240,
+        "enabled": False,
     },
     {
         "name": "OpenAI News RSS",
         "source_type": "rss",
         "url": "https://openai.com/news/rss.xml",
         "interval_minutes": 240,
+        "enabled": False,
     },
     {
         "name": "Anthropic News",
         "source_type": "web",
         "url": "https://www.anthropic.com/news",
         "interval_minutes": 240,
+        "enabled": False,
     },
     {
         "name": "Hugging Face Blog Feed",
         "source_type": "rss",
         "url": "https://huggingface.co/blog/feed.xml",
         "interval_minutes": 240,
+        "enabled": False,
     },
 ]
 
@@ -282,6 +342,12 @@ def seed_sources() -> None:
         for source in DEFAULT_SOURCES:
             exists = db.scalar(select(DataSource).where(DataSource.url == source["url"]))
             if exists:
+                exists.name = source["name"]
+                exists.source_type = source["source_type"]
+                exists.enabled = source.get("enabled", True)
+                exists.interval_minutes = source["interval_minutes"]
+                db.add(exists)
+                db.commit()
                 continue
             create_source(
                 db,
@@ -289,7 +355,7 @@ def seed_sources() -> None:
                     name=source["name"],
                     source_type=source["source_type"],
                     url=source["url"],
-                    enabled=True,
+                    enabled=source.get("enabled", True),
                     interval_minutes=source["interval_minutes"],
                 ),
             )

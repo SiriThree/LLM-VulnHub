@@ -49,6 +49,8 @@ def list_notification_events(
 
     items: list[dict] = []
     for task in db.scalars(stmt).all():
+        if (task.output_data or {}).get("suppressed"):
+            continue
         item = _serialize_notification_task(task)
         current_event_type = item["event_type"]
         if event_type and current_event_type != event_type:

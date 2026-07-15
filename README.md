@@ -1,144 +1,163 @@
 # LLM-VulnHub
 
-面向 AI 大模型与 Agent 场景的漏洞情报采集、AI 分析、审核入库与检索问答平台。
+LLM-VulnHub 是一个面向大语言模型应用安全的漏洞情报采集、AI 分析、审核入库与 RAG 问答平台原型。项目目标是把公开来源中的原始安全文本，转换成可追踪、可审核、可检索、可展示的 AI 大模型漏洞资产。
 
-项目核心目标是把“公开来源中的原始安全文本”变成“可审核、可追踪、可检索、可展示”的 AI 漏洞资产，覆盖动态采集、AI 相关性判断、结构化抽取、风险分析、相似检测、人工复核、标准化入库和前端展示的完整链路。
+当前系统覆盖的主流程：
 
-## 1. 项目定位
+```text
+真实数据源采集 -> LLM 专项初筛 -> AI 多阶段分析 -> 情报池审核 -> 标准化入库 -> 漏洞看板 / RAG 问答
+```
 
-LLM-VulnHub 不是单纯的漏洞列表页，而是一套 AI 漏洞运营平台原型，重点解决三类问题：
+## 核心能力
 
-1. 如何持续发现和汇聚 AI 相关安全情报。
-2. 如何利用 LLM 把原始文本转换成结构化漏洞记录。
-3. 如何让分析结果进入可审核、可发布、可检索的业务流程。
+- 动态采集：支持 GitHub Advisory、RSS、厂商公告、框架 Release Atom 等真实来源。
+- 定向漏洞源：默认启用 LangChain、LlamaIndex、Transformers、Gradio、vLLM、ChromaDB、MCP SDK、n8n-MCP 等 LLM 组件定向 Advisory 源。
+- LLM 专项初筛：先过滤普通 npm/pip CVE、产品新闻、教程、发布公告，再进入 AI 分析。
+- AI 结构化抽取：抽取标题、漏洞类型、影响组件、攻击方式、影响、修复建议、风险分数等字段。
+- 多阶段 Agent 分析：包含 triage、extract、merge、risk、asset impact、review 等阶段，并保留执行轨迹。
+- 相似漏洞检测：给出候选合并项，辅助去重和人工复核。
+- 情报池审核：支持 ignored、pending_review、approved 等状态流转。
+- 漏洞库管理：支持标准化漏洞记录的增删改查、详情、搜索与筛选。
+- RAG 问答：基于平台内漏洞资产进行检索问答。
+- 任务中心：展示 crawl、analysis、review、notification、beat 等异步任务状态。
+- 源健康指标：展示请求成功率、初筛通过率、LLM 命中率、入库转化率。
 
-当前版本已经具备一条可运行的主流程：
+## 技术栈
 
-`真实数据源采集 -> 情报池预筛选 -> AI 分析/多 Agent 研判 -> 人工复核 -> 发布入库 -> 漏洞看板/RAG 问答`
+- 前端：Next.js、TypeScript、Tailwind CSS、shadcn/ui 风格组件
+- 后端：FastAPI、Pydantic、SQLAlchemy 2.0、Alembic
+- 数据库：PostgreSQL + pgvector，开发环境也支持 SQLite
+- 异步任务：Celery + Redis
+- AI 工作流：LangGraph 风格多阶段工作流
+- 模型接口：统一 `LLMClient`，支持 DeepSeek、OpenAI、mock
+- 部署：Docker Compose
 
-## 2. 当前能力
-
-### 动态采集
-
-- 支持从真实公开源抓取情报
-- 当前已接入的来源类型包括：
-  - GitHub Security Advisories
-  - RSS / 安全博客 / 厂商公告类源
-- 支持数据源管理、立即采集、任务追踪、失败重试
-- 支持采集前预过滤，减少普通产品新闻、发布公告、教程文章进入分析链路
-
-### AI 分析
-
-- AI 相关性判断：判断文本是否属于 AI / LLM / Agent 安全情报
-- AI 结构化抽取：抽取标题、漏洞类型、影响组件、攻击方式、影响、修复建议等字段
-- AI 辅助风险解释：生成风险原因、资产影响说明、复核建议
-- 相似漏洞候选推荐：为人工合并或去重提供参考
-- 多 Agent 执行轨迹展示：前端可查看 triage / extract / merge / review 等阶段结果
-
-### 业务流程
-
-- 情报池：统一承接采集结果与 AI 分析结果
-- 审核流转：支持 reviewable / ignored / approved 等状态
-- 漏洞库：支持标准化漏洞记录的入库与展示
-- 任务中心：展示 crawl / analyze_document / review 等异步任务状态
-- 通知与运营看板：提供平台运行侧观察视图
-
-### 前端展示
-
-- Dashboard 漏洞态势看板
-- 动态采集中心
-- 情报池审核台
-- AI 结构化抽取台
-- 漏洞库列表与详情
-- 任务中心
-- RAG 问答页
-- 平台设置页
-
-## 3. 技术栈
-
-### 前端
-
-- Next.js
-- TypeScript
-- Tailwind CSS
-- shadcn/ui 风格组件
-
-### 后端
-
-- FastAPI
-- Pydantic
-- SQLAlchemy 2.0
-- Alembic
-
-### 数据与异步
-
-- PostgreSQL
-- pgvector
-- Redis
-- Celery
-
-### AI / 工作流
-
-- 统一 `LLMClient` 封装
-- 支持 `DeepSeek / OpenAI / mock`
-- LangGraph 风格的多阶段分析编排
-
-### 部署
-
-- Docker Compose
-
-## 4. 目录结构
+## 目录结构
 
 ```text
 .
-├─ backend/                 # FastAPI + Celery + AI workflow
-│  ├─ app/
-│  │  ├─ api/               # 路由层
-│  │  ├─ core/              # 配置与基础设施
-│  │  ├─ db/                # 模型与会话
-│  │  ├─ schemas/           # Pydantic schema
-│  │  ├─ services/          # 采集、AI、评分、情报、漏洞等服务
-│  │  ├─ workflows/         # LangGraph / 多阶段分析工作流
-│  │  └─ evals/             # AI 评测脚本与数据集
-│  └─ alembic/              # 数据库迁移
-├─ frontend/                # Next.js 前端
-├─ docs/                    # 2.0 设计文档、开发清单、评估指南
-├─ scripts/                 # 辅助脚本
-└─ docker-compose.yml
+├── backend/                 # FastAPI + Celery + AI workflow
+│   ├── app/
+│   │   ├── api/             # API 路由
+│   │   ├── core/            # 配置与安全
+│   │   ├── db/              # SQLAlchemy 模型与会话
+│   │   ├── schemas/         # Pydantic schema
+│   │   ├── services/        # 采集、LLM、情报、漏洞、评分等服务
+│   │   └── workflows/       # 多阶段 AI 分析工作流
+│   └── alembic/             # 数据库迁移
+├── frontend/                # Next.js 前端
+├── docs/                    # 设计报告、开发清单、演示文档
+├── scripts/                 # 本地启动、报告生成等脚本
+├── data/                    # 示例数据与辅助资源
+└── docker-compose.yml
 ```
 
-## 5. 核心流程
+## 快速启动
 
-### 5.1 动态采集流程
+推荐两种方式：
 
-1. 数据源定时或手动触发采集任务
-2. 抓取原始条目并写入 `CollectedDocument`
-3. 执行预过滤，剔除明显无关的普通资讯
-4. 创建分析任务进入 AI 流程
+- 本地开发演示：使用 `scripts/start-dev.ps1`，适合 Windows 本机调试。
+- Docker 一键运行：使用 `docker compose up --build`，适合完整部署演示。
 
-### 5.2 AI 分析流程
+### 方式一：Windows 本地一键启动
 
-1. `Triage Agent`
-   - 判断是否属于 AI 安全情报
-   - 输出分类与置信度
-2. `Extraction Agent`
-   - 抽取结构化漏洞字段
-3. `Merge Agent`
-   - 发现相似漏洞，给出去重/合并建议
-4. `Risk / Asset / Reviewer Agent`
-   - 补充风险解释、资产影响、发布建议
-5. 写回情报池，等待人工复核或直接入库
+前置要求：
 
-### 5.3 审核与入库
+- Python 3.12
+- Node.js 20+
+- Docker Desktop，用于启动 Redis
+- 已配置 `.env` 或 `backend/.env`
 
-1. 审核员在情报池查看 AI 分析结果
-2. 对可发布记录执行批准
-3. 平台将标准化结果写入漏洞库
-4. 在 Dashboard、漏洞详情页、RAG 问答中对外提供使用
+首次启动：
 
-## 6. 本地启动
+```powershell
+cd D:\2025-2026-3
+.\scripts\start-dev.ps1
+```
 
-### 6.1 后端
+再次启动，如果依赖已经装好，可以跳过安装：
+
+```powershell
+.\scripts\start-dev.ps1 -SkipInstall
+```
+
+默认会在后台启动：
+
+```text
+Redis
+FastAPI backend
+Next.js frontend
+Celery ingestion worker
+Celery analysis worker x 2
+Celery review/notification worker
+Celery beat
+```
+
+访问地址：
+
+- 前端：http://127.0.0.1:3000
+- API 文档：http://127.0.0.1:8000/docs
+
+停止所有后台进程：
+
+```powershell
+.\scripts\stop-dev.ps1
+```
+
+日志位置：
+
+```text
+backend/backend-dev.log
+backend/celery-ingestion.log
+backend/celery-analysis-1.log
+backend/celery-analysis-2.log
+backend/celery-review-notification.log
+backend/celery-beat.log
+frontend/frontend-dev.log
+```
+
+说明：
+
+- Windows 下 Celery 使用 `solo` pool。为了体现并发，脚本会启动多个独立 worker 进程，而不是让你手动打开多个终端。
+- 如果你已经自己启动 Redis，可以使用 `.\scripts\start-dev.ps1 -SkipRedis`。
+- `http://127.0.0.1:8000/` 返回 404 是正常的，后端没有根页面，请访问 `/docs`。
+
+### 方式二：Docker Compose 一键运行
+
+复制并修改环境变量：
+
+```powershell
+copy .env.example .env
+```
+
+启动：
+
+```powershell
+docker compose up --build
+```
+
+访问：
+
+- 前端：http://127.0.0.1:3000
+- API 文档：http://127.0.0.1:8000/docs
+
+停止：
+
+```powershell
+docker compose down
+```
+
+清空容器数据卷：
+
+```powershell
+docker compose down -v
+```
+
+## 手动启动方式
+
+如果需要逐个服务调试，可以按下面方式启动。
+
+### 后端
 
 ```powershell
 cd D:\2025-2026-3\backend
@@ -148,16 +167,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-接口文档：
-
-- FastAPI OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-
-说明：
-
-- `http://127.0.0.1:8000/` 返回 404 是正常的，后端没有首页路由。
-- 健康检查建议访问 `/health` 或 `/docs`。
-
-### 6.2 前端
+### 前端
 
 ```powershell
 cd D:\2025-2026-3\frontend
@@ -165,138 +175,165 @@ npm install
 npm run dev
 ```
 
-前端地址：
-
-- Web UI: [http://127.0.0.1:3000](http://127.0.0.1:3000)
-
-### 6.3 Redis / Celery
-
-如果需要完整体验异步采集与分析链路，需要额外启动 Redis 和 Celery worker。
-
-Redis 启动后，再启动 worker：
-
-```powershell
-cd D:\2025-2026-3\backend
-.\.venv\Scripts\Activate.ps1
-.\.venv\Scripts\celery.exe -A app.worker.celery_app worker --loglevel=info
-```
-
-说明：
-
-- 在 Windows 本地开发环境中，Celery 已按 `solo` 模式适配，避免 prefork 带来的兼容性问题。
-- 如果 worker 没有消费任务，优先检查 Redis 是否启动，以及 worker 是否成功监听 `ingestion / analysis / review / notification` 队列。
-
-### 6.4 Docker Compose
+### Redis
 
 ```powershell
 cd D:\2025-2026-3
-docker compose up --build
+docker compose up -d redis
 ```
 
-## 7. 环境变量
+### Celery
 
-根目录 `.env` 需要按实际情况配置。
+如果手动启动，建议按队列拆分 worker：
 
-### LLM
+```powershell
+cd D:\2025-2026-3\backend
 
-使用 DeepSeek：
+# 采集队列
+.\.venv\Scripts\celery.exe -A app.worker.celery_app worker -Q ingestion --pool=solo --loglevel=info
+
+# 分析队列，可以开两个窗口提高吞吐
+.\.venv\Scripts\celery.exe -A app.worker.celery_app worker -Q analysis --pool=solo --loglevel=info
+
+# 复核与通知队列
+.\.venv\Scripts\celery.exe -A app.worker.celery_app worker -Q review,notification --pool=solo --loglevel=info
+
+# 定时调度
+.\.venv\Scripts\celery.exe -A app.worker.celery_app beat --loglevel=info
+```
+
+本地开发时更推荐使用：
+
+```powershell
+.\scripts\start-dev.ps1 -SkipInstall
+```
+
+## 环境变量
+
+根目录 `.env` 用于 Docker Compose，`backend/.env` 用于本地后端开发。常用配置如下：
 
 ```env
 LLM_PROVIDER=deepseek
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_API_KEY=your_key
-```
 
-使用 OpenAI：
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
 
-```env
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_key
-OPENAI_MODEL=gpt-4.1-mini
-```
-
-### GitHub Advisory
-
-```env
 GITHUB_TOKEN=your_token
+
+DATABASE_URL=sqlite:///./llm_vulnhub.db
+REDIS_URL=redis://localhost:6379/0
 ```
 
-未配置 `GITHUB_TOKEN` 时，匿名请求可能会被限流，导致采集速度慢或部分源失败。
+说明：
 
-## 8. 如何验证与演示
+- `GITHUB_TOKEN` 建议配置，否则 GitHub Advisory 匿名请求可能限流。
+- DeepSeek / OpenAI 二选一即可。
+- 如果只是看流程，可以使用 `LLM_PROVIDER=mock`，但 AI 抽取真实性会下降。
 
-推荐按下面这条顺序演示：
+## 演示流程
 
-### 路线 A：动态采集主线
+### 1. 动态采集
 
-1. 打开采集中心，查看真实数据源
-2. 对某个数据源点击“立即采集”
-3. 到任务中心观察：
-   - crawl 任务是否从 `queued` 进入 `running`
-   - 是否开始出现发现数、处理数、待分析数
-4. 到情报池查看新进入的情报
-5. 选择可复核项执行批准入库
-6. 到漏洞库与 Dashboard 查看结果
+1. 打开“动态采集”页面。
+2. 点击“采集全部启用源”。
+3. 在任务中心观察 crawl 任务、source run 漏斗和 analysis 队列。
+4. 回到采集页查看每个源的：
+   - 请求成功率
+   - 初筛通过率
+   - LLM 命中率
+   - 入库转化率
+5. 到漏洞看板查看新增漏洞资产。
 
-### 路线 B：AI 抽取主线
+### 2. AI 结构化抽取
 
-1. 打开 `AI 结构化抽取`
-2. 输入一段 AI 漏洞文本
-3. 检查模型是否输出：
-   - 标题
-   - 漏洞类型
-   - 严重等级 / 分数
-   - 影响组件
-   - 攻击方式
-   - 修复建议
-4. 观察 Phase 2 Agent 执行轨迹
-5. 需要时手动修订后再入库
+1. 打开“AI 抽取”页面。
+2. 输入一段 LLM / RAG / Agent 漏洞文本。
+3. 点击 AI 解析。
+4. 查看结构化字段和 Phase 2 Agent 执行轨迹。
 
-### 路线 C：检索问答主线
+### 3. 情报池审核
 
-1. 漏洞库存在已发布记录后
-2. 打开 RAG 问答页
-3. 提问：
-   - “LangChain 相关的提示词注入有哪些典型风险？”
-   - “RAG 数据泄露漏洞通常怎么修复？”
-4. 检查回答是否引用了平台内漏洞记录
+1. 打开“情报池”。
+2. 查看 ignored、pending_review、approved 状态。
+3. 对可发布情报执行批准入库或合并处理。
 
-## 9. 当前版本的边界
+### 4. RAG 问答
 
-这一版已经能体现“真实来源 + AI 分析 + 审核入库 + 前端展示”的完整闭环，但它仍然是偏原型到工程化过渡阶段，不是完全面向生产的大规模平台。
+1. 确认漏洞库已有数据。
+2. 打开“RAG 问答”。
+3. 提问示例：
+   - `LangChain 相关漏洞有哪些典型风险？`
+   - `MCP 工具调用类漏洞如何修复？`
+   - `RAG 数据泄露通常有哪些缓解措施？`
 
-当前已具备：
+## 数据清理
 
-- 可运行的业务主流程
-- 真实来源接入
-- 异步任务与任务中心
-- 多阶段 AI 分析
-- 人工审核与发布
+如果需要重新演示完整采集链路，可以清空业务数据，保留数据源配置。建议通过后端脚本或数据库管理工具删除以下业务表：
 
-当前仍可继续加强：
+```text
+agent_executions
+analysis_jobs
+merge_candidates
+vulnerability_occurrences
+intelligence_items
+collected_documents
+analysis_records
+document_chunks
+vulnerabilities
+tags
+review_actions
+tasks
+vulnerability_tags
+```
 
-- 更多高质量真实数据源
-- 更强的去重与实体归一化
-- 更稳定的并发吞吐与限流控制
-- 更细的审核策略与告警策略
-- 更完整的评测集与自动化回归测试
+不要删除 `data_sources`，否则需要重新 seed 数据源。
 
-## 10. 重点代码入口
+## 关键代码入口
 
-如果你要快速理解项目，建议优先看这些文件：
+- 后端入口：`backend/app/main.py`
+- Celery 配置：`backend/app/worker.py`
+- 动态采集：`backend/app/services/collector_service.py`
+- 源健康指标：`backend/app/services/provenance_service.py`
+- 情报池：`backend/app/services/intel_service.py`
+- LLM 封装：`backend/app/services/llm_service.py`
+- Prompt 注册：`backend/app/services/prompt_registry.py`
+- AI 工作流：`backend/app/workflows/vuln_analysis_graph.py`
+- 前端采集页：`frontend/app/collectors/page.tsx`
+- AI 抽取前端：`frontend/components/ai-extract-client.tsx`
+- 情报池前端：`frontend/components/intel-pool-client.tsx`
 
-- 后端入口：[D:\2025-2026-3\backend\app\main.py](D:\2025-2026-3\backend\app\main.py)
-- Celery worker：[D:\2025-2026-3\backend\app\worker.py](D:\2025-2026-3\backend\app\worker.py)
-- 采集服务：[D:\2025-2026-3\backend\app\services\collector_service.py](D:\2025-2026-3\backend\app\services\collector_service.py)
-- LLM 服务：[D:\2025-2026-3\backend\app\services\llm_service.py](D:\2025-2026-3\backend\app\services\llm_service.py)
-- Prompt 注册表：[D:\2025-2026-3\backend\app\services\prompt_registry.py](D:\2025-2026-3\backend\app\services\prompt_registry.py)
-- 情报池服务：[D:\2025-2026-3\backend\app\services\intel_service.py](D:\2025-2026-3\backend\app\services\intel_service.py)
-- 风险评分：[D:\2025-2026-3\backend\app\services\scoring_service.py](D:\2025-2026-3\backend\app\services\scoring_service.py)
-- 漏洞 Schema：[D:\2025-2026-3\backend\app\schemas\vulnerability.py](D:\2025-2026-3\backend\app\schemas\vulnerability.py)
-- AI 抽取前端：[D:\2025-2026-3\frontend\components\ai-extract-client.tsx](D:\2025-2026-3\frontend\components\ai-extract-client.tsx)
-- 情报池前端：[D:\2025-2026-3\frontend\components\intel-pool-client.tsx](D:\2025-2026-3\frontend\components\intel-pool-client.tsx)
+## 当前边界
 
+当前版本已经可以展示完整闭环，但仍属于原型到工程化之间的阶段：
 
+- 本地 Windows Celery 依赖多进程模拟并发，生产建议使用 Linux/Docker worker。
+- 自动入库策略偏保守，仍需要人工复核能力兜底。
+- 数据源虽然已聚焦 LLM 组件，但还可以继续扩展 NVD、OSV、厂商安全公告等来源。
+- RAG 问答页和前端交互仍可进一步优化。
 
+## 常见问题
 
+### Celery beat 报 `EOFError: Ran out of input`
+
+通常是 `backend/celerybeat-schedule.*` 本地调度缓存损坏，删除后重启即可：
+
+```powershell
+Remove-Item backend\celerybeat-schedule.* -Force
+```
+
+### 采集成功但入库少
+
+先看采集页源级漏斗：
+
+- 请求成功率低：数据源或网络问题。
+- 初筛通过率低：源质量偏低，不是 LLM 安全源。
+- LLM 命中率低：候选不是大模型漏洞。
+- 入库转化率低：可能重复、字段不完整或需要人工复核。
+
+### GitHub Advisory 限流
+
+配置 `GITHUB_TOKEN`。Fine-grained token 不需要写权限，公开 Advisory 读取场景通常只需要最小只读能力。
