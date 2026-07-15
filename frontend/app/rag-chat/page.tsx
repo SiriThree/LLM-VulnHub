@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { api, Vulnerability } from "@/lib/api";
+import { useSessionDraft } from "@/lib/use-session-draft";
 
 type Hit = { vulnerability: Vulnerability; similarity: number; chunk_text: string };
 type RagResponse = { answer: string; references: Hit[] };
@@ -30,10 +31,10 @@ const EXAMPLE_QUESTIONS = [
 ];
 
 export default function RagChatPage() {
-  const [question, setQuestion] = useState(EXAMPLE_QUESTIONS[0]);
-  const [answer, setAnswer] = useState("");
-  const [refs, setRefs] = useState<Hit[]>([]);
-  const [topK, setTopK] = useState(5);
+  const [question, setQuestion] = useSessionDraft("llm-vulnhub:rag-question-draft:v1", EXAMPLE_QUESTIONS[0]);
+  const [answer, setAnswer] = useSessionDraft("llm-vulnhub:rag-answer-draft:v1", "");
+  const [refs, setRefs] = useSessionDraft<Hit[]>("llm-vulnhub:rag-references-draft:v1", []);
+  const [topK, setTopK] = useSessionDraft("llm-vulnhub:rag-top-k-draft:v1", 5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
