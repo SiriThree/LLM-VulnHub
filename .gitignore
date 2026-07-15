@@ -14,3 +14,4 @@ out/
 dist/
 
 postgres_data/
+AGENTS.md
