@@ -6,6 +6,7 @@ import { Shield, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useSessionDraft } from "@/lib/use-session-draft";
 
 const ROLES = [
   {
@@ -36,8 +37,14 @@ function clearCookie(name: string) {
 }
 
 export function RoleSimulator() {
-  const [actor, setActor] = useState("demo-analyst");
-  const [role, setRole] = useState<RoleValue>("analyst");
+  const [actor, setActor, { clearDraft: clearActorDraft }] = useSessionDraft(
+    "llm-vulnhub:role-actor-draft:v1",
+    "demo-analyst",
+  );
+  const [role, setRole, { clearDraft: clearRoleDraft }] = useSessionDraft<RoleValue>(
+    "llm-vulnhub:role-value-draft:v1",
+    "analyst",
+  );
   const [saved, setSaved] = useState("");
 
   const currentRole = useMemo(() => ROLES.find((item) => item.value === role) ?? ROLES[1], [role]);
@@ -53,6 +60,8 @@ export function RoleSimulator() {
   const resetContext = () => {
     clearCookie("llm_vulnhub_actor");
     clearCookie("llm_vulnhub_role");
+    clearActorDraft("demo-analyst");
+    clearRoleDraft("analyst");
     setSaved("已恢复为后端默认身份。");
     window.location.reload();
   };
