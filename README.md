@@ -30,6 +30,7 @@ LLM-VulnHub 是一个面向大语言模型应用安全的漏洞情报采集、AI
 - 异步任务：Celery + Redis
 - AI 工作流：LangGraph 风格多阶段工作流
 - 模型接口：统一 `LLMClient`，支持 DeepSeek、OpenAI、mock
+- 语义检索：FastEmbed + `paraphrase-multilingual-MiniLM-L12-v2`（中英文、384 维）
 - 部署：Docker Compose
 
 ## 目录结构
@@ -139,7 +140,21 @@ docker compose up --build
 访问：
 
 - 前端：http://127.0.0.1:3000
-- API 文档：http://127.0.0.1:8000/docs
+- API 文档：http://127.0.0.1:8001/docs
+
+首次构建会下载约 220 MB 的多语言 Embedding 模型。如果 Docker 无法直连 Hugging Face，可在 `.env` 中填写 Clash 的宿主机地址，例如：
+
+```env
+MODEL_DOWNLOAD_PROXY=http://host.docker.internal:7897
+```
+
+其中 `7897` 应替换为 Clash 实际的 HTTP/Mixed 监听端口，并确保 Clash 已开启局域网访问。该变量仅用于镜像构建下载，不会作为应用运行代理。
+
+升级 Embedding 模型或导入旧数据库后，重建全部 RAG 向量：
+
+```powershell
+docker compose exec backend python -m app.reindex_embeddings
+```
 
 停止：
 
@@ -210,22 +225,41 @@ cd D:\2025-2026-3\backend
 
 ## 环境变量
 
-根目录 `.env` 用于 Docker Compose，`backend/.env` 用于本地后端开发。常用配置如下：
+先将 `.env.example` 复制为根目录 `.env`。根目录配置供 Docker Compose 使用；直接运行后端时，也可将同样的配置放到 `backend/.env`。
 
 ```env
+# LLM：DeepSeek 与 OpenAI 二选一
 LLM_PROVIDER=deepseek
-DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 DEEPSEEK_MODEL=deepseek-chat
-DEEPSEEK_API_KEY=your_key
+DEEPSEEK_API_KEY=your_deepseek_key
+
+LLM_TIMEOUT_SECONDS=45
+LLM_MAX_RETRIES=2
+LLM_TEMPERATURE=0.1
+LLM_FALLBACK_TO_MOCK=false
 
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
 
-GITHUB_TOKEN=your_token
+# GitHub Advisory；不采集 GitHub 时可留空
+GITHUB_TOKEN=
 
-DATABASE_URL=sqlite:///./llm_vulnhub.db
-REDIS_URL=redis://localhost:6379/0
+# Docker 服务地址
+DATABASE_URL=postgresql+psycopg://llm_vulnhub:llm_vulnhub@postgres:5432/llm_vulnhub
+REDIS_URL=redis://redis:6379/0
+
+# 浏览器访问宿主机；Next.js 服务端访问 Docker 内部服务名
+NEXT_PUBLIC_API_BASE=http://localhost:8001/api/v1
+INTERNAL_API_BASE=http://backend:8000/api/v1
+
+# 本地中英文语义 Embedding，不消耗 LLM Token
+EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+EMBEDDING_CACHE_DIR=./.cache/fastembed
+
+# 可选：Docker 下载模型时使用宿主机 Clash
+MODEL_DOWNLOAD_PROXY=
 ```
 
 说明：
@@ -233,6 +267,10 @@ REDIS_URL=redis://localhost:6379/0
 - `GITHUB_TOKEN` 建议配置，否则 GitHub Advisory 匿名请求可能限流。
 - DeepSeek / OpenAI 二选一即可。
 - 如果只是看流程，可以使用 `LLM_PROVIDER=mock`，但 AI 抽取真实性会下降。
+- `NEXT_PUBLIC_API_BASE` 是浏览器地址，`INTERNAL_API_BASE` 是前端容器访问后端的地址，不能都写成 `localhost`。
+- Embedding 模型在本地运行，与 `LLM_PROVIDER` 无关；首次构建完成后模型已包含在后端镜像中。
+- 非 Docker 本地开发时，将数据库和 Redis 分别改为 `sqlite:///./llm_vulnhub.db`、`redis://localhost:6379/0`，API 默认使用 8000 端口。
+- `.env` 包含真实密钥，不得提交到 Git。
 
 ## 演示流程
 

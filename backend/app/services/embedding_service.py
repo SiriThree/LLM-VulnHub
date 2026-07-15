@@ -1,36 +1,38 @@
-import hashlib
 import math
-import re
-from collections import Counter
+import warnings
+from functools import lru_cache
+
+from fastembed import TextEmbedding
 
 from app.core.config import get_settings
 
 
-TOKEN_RE = re.compile(r"[A-Za-z0-9_\-\u4e00-\u9fff]+")
+@lru_cache(maxsize=1)
+def get_embedding_model() -> TextEmbedding:
+    settings = get_settings()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*now uses mean pooling instead of CLS embedding.*")
+        return TextEmbedding(
+            model_name=settings.embedding_model,
+            cache_dir=settings.embedding_cache_dir,
+        )
 
 
-def tokenize(text: str) -> list[str]:
-    return [t.lower() for t in TOKEN_RE.findall(text or "")]
+def embed_texts(texts: list[str]) -> list[list[float]]:
+    if not texts:
+        return []
+    vectors = get_embedding_model().embed([text or "" for text in texts])
+    return [[round(float(value), 7) for value in vector] for vector in vectors]
 
 
 def embed_text(text: str) -> list[float]:
-    dim = get_settings().embedding_dim
-    vector = [0.0] * dim
-    counts = Counter(tokenize(text))
-    for token, count in counts.items():
-        digest = hashlib.sha256(token.encode("utf-8")).digest()
-        idx = int.from_bytes(digest[:4], "big") % dim
-        sign = 1 if digest[4] % 2 == 0 else -1
-        vector[idx] += sign * (1 + math.log(count))
-    norm = math.sqrt(sum(v * v for v in vector)) or 1.0
-    return [round(v / norm, 6) for v in vector]
+    return embed_texts([text])[0]
 
 
 def cosine_similarity(a: list[float] | None, b: list[float] | None) -> float:
-    if not a or not b:
+    if not a or not b or len(a) != len(b):
         return 0.0
-    size = min(len(a), len(b))
-    dot = sum(a[i] * b[i] for i in range(size))
-    na = math.sqrt(sum(x * x for x in a[:size])) or 1.0
-    nb = math.sqrt(sum(x * x for x in b[:size])) or 1.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a)) or 1.0
+    nb = math.sqrt(sum(x * x for x in b)) or 1.0
     return max(0.0, min(1.0, dot / (na * nb)))

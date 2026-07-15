@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.cache/
 llm_vulnhub.db
 *.log
 .dev-pids.json
