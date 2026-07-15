@@ -139,8 +139,16 @@ docker compose up --build
 
 访问：
 
-- 前端：http://127.0.0.1:3000
-- API 文档：http://127.0.0.1:8001/docs
+Docker 会随机分配可用的宿主机端口。启动后执行以下命令查看实际端口：
+
+```powershell
+docker compose port frontend 3000
+docker compose port backend 8000
+docker compose port postgres 5432
+docker compose port redis 6379
+```
+
+例如输出 `0.0.0.0:49152` 时，前端访问地址为 `http://127.0.0.1:49152`；后端对应端口的 API 文档地址为 `http://127.0.0.1:端口/docs`。
 
 首次构建会下载约 220 MB 的多语言 Embedding 模型。如果 Docker 无法直连 Hugging Face，可在 `.env` 中填写 Clash 的宿主机地址，例如：
 
@@ -250,9 +258,15 @@ GITHUB_TOKEN=
 DATABASE_URL=postgresql+psycopg://llm_vulnhub:llm_vulnhub@postgres:5432/llm_vulnhub
 REDIS_URL=redis://redis:6379/0
 
-# 浏览器访问宿主机；Next.js 服务端访问 Docker 内部服务名
-NEXT_PUBLIC_API_BASE=http://localhost:8001/api/v1
+# 浏览器通过前端同源代理访问 API；Next.js 服务端访问 Docker 内部服务名
+NEXT_PUBLIC_API_BASE=/api/v1
 INTERNAL_API_BASE=http://backend:8000/api/v1
+
+# 0 表示 Docker 自动分配可用宿主机端口，也可改为具体端口
+FRONTEND_PORT=0
+BACKEND_PORT=0
+POSTGRES_PORT=0
+REDIS_PORT=0
 
 # 本地中英文语义 Embedding，不消耗 LLM Token
 EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
@@ -267,7 +281,8 @@ MODEL_DOWNLOAD_PROXY=
 - `GITHUB_TOKEN` 建议配置，否则 GitHub Advisory 匿名请求可能限流。
 - DeepSeek / OpenAI 二选一即可。
 - 如果只是看流程，可以使用 `LLM_PROVIDER=mock`，但 AI 抽取真实性会下降。
-- `NEXT_PUBLIC_API_BASE` 是浏览器地址，`INTERNAL_API_BASE` 是前端容器访问后端的地址，不能都写成 `localhost`。
+- `NEXT_PUBLIC_API_BASE=/api/v1` 使用前端同源代理；`INTERNAL_API_BASE` 使用 Docker 内部服务名，因此后端宿主机端口变化不会影响页面调用。
+- 四个 `*_PORT` 设为 `0` 时由 Docker 自动选择宿主机端口；如需固定端口，可设置为 `FRONTEND_PORT=3000` 等具体值。
 - Embedding 模型在本地运行，与 `LLM_PROVIDER` 无关；首次构建完成后模型已包含在后端镜像中。
 - 非 Docker 本地开发时，将数据库和 Redis 分别改为 `sqlite:///./llm_vulnhub.db`、`redis://localhost:6379/0`，API 默认使用 8000 端口。
 - `.env` 包含真实密钥，不得提交到 Git。

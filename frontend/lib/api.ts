@@ -1,4 +1,4 @@
-const BROWSER_API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001/api/v1";
+const BROWSER_API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api/v1";
 const SERVER_API_BASE = process.env.INTERNAL_API_BASE ?? "http://backend:8000/api/v1";
 
 export const API_BASE = typeof window === "undefined" ? SERVER_API_BASE : BROWSER_API_BASE;
