@@ -7,7 +7,7 @@ export default function SettingsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold">设置</h1>
-        <p className="text-sm text-slate-500">统一查看模型接入、运行环境和演示权限配置。</p>
+        <p className="text-sm text-slate-500">查看模型接入、运行环境和访问角色配置。</p>
       </div>
 
       <RoleSimulator />
@@ -35,11 +35,11 @@ export default function SettingsPage() {
       </Card>
 
       <Card className="space-y-3">
-        <h2 className="font-semibold">推荐验证动作</h2>
+        <h2 className="font-semibold">功能自检</h2>
         <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-3">
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">模型抽取</div>
-            <div className="mt-1 leading-6">切到 AI 抽取页，输入真实漏洞描述，观察标题、类型、组件、攻击方式、修复建议是否随文本变化。</div>
+            <div className="mt-1 leading-6">进入辅助抽取页，输入一段漏洞描述，核对标题、类型、组件、攻击方式和修复建议。</div>
           </div>
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">权限控制</div>
@@ -47,7 +47,7 @@ export default function SettingsPage() {
           </div>
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">运行观测</div>
-            <div className="mt-1 leading-6">进入 Operations 页，查看任务状态、模型调用次数和 token 消耗。</div>
+            <div className="mt-1 leading-6">进入运行运营页，查看任务状态、模型调用次数和 token 消耗。</div>
           </div>
         </div>
       </Card>

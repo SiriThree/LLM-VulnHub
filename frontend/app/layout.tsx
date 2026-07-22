@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "LLM-VulnHub",
-  description: "AI 大模型漏洞管理与智能分析平台",
+  description: "面向 LLM、RAG 与 Agent 应用的漏洞情报管理平台",
 };
 
 export default function RootLayout({
@@ -18,7 +18,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="bg-background text-foreground antialiased">
         <Nav />
-        <main className="ml-64 min-h-screen px-8 py-6">{children}</main>
+        <main className="min-h-screen px-4 pb-8 pt-20 sm:px-6 lg:ml-64 lg:px-8 lg:py-6">{children}</main>
       </body>
     </html>
   );

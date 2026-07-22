@@ -250,7 +250,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         <div>
           <h1 className="text-2xl font-semibold">情报池</h1>
           <p className="text-sm text-slate-500">
-            动态采集结果先进入情报池，经 AI 判断、结构化抽取、相似合并建议和人工复核后，再发布到正式漏洞库。
+            采集结果先进入情报池，经过相关性判断、字段抽取、相似记录比对和人工复核后，再发布到正式漏洞库。
           </p>
         </div>
         <Button type="button" className="border border-border bg-white text-slate-700" onClick={() => load(selectedId)}>
@@ -414,7 +414,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                   <div className="max-h-72 overflow-auto rounded-md border border-border bg-white p-3 text-sm leading-6">{selected.raw_text}</div>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-sm font-semibold">AI 判断</div>
+                  <div className="text-sm font-semibold">相关性判断</div>
                   <div className="rounded-md border border-border bg-white p-3 text-sm leading-6">
                     <div>判定原因：{selected.triage_reason || "暂无说明"}</div>
                     <div className="mt-2 break-all">来源 URL：{selected.url ?? "-"}</div>

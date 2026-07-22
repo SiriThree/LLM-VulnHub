@@ -10,7 +10,7 @@ export default function NewVulnerabilityPage() {
           返回漏洞库
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">手动新增漏洞</h1>
-        <p className="text-sm text-slate-500">手动录入一条标准化漏洞记录，用于补录、纠错或演示。</p>
+        <p className="text-sm text-slate-500">手动补录或修正标准化漏洞记录。</p>
       </div>
       <VulnerabilityForm mode="create" />
     </div>

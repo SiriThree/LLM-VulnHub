@@ -48,7 +48,7 @@ export default async function VulnerabilitiesPage({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">漏洞库</h1>
-          <p className="mt-1 text-sm text-slate-500">支持搜索、筛选、详情查看、人工维护和 AI 抽取入库，是平台最终的标准化漏洞资产面。</p>
+          <p className="mt-1 text-sm text-slate-500">查询和维护经复核的标准化漏洞记录，支持筛选、详情查看与辅助抽取入库。</p>
         </div>
         <div className="flex gap-2">
           <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium" href="/vulnerabilities/new">
@@ -56,7 +56,7 @@ export default async function VulnerabilitiesPage({
             手动新增
           </Link>
           <Link className="inline-flex h-9 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white" href="/ai-extract">
-            AI 抽取
+            辅助抽取
           </Link>
         </div>
       </div>

@@ -1,5 +1,7 @@
 # LLM-VulnHub
 
+> 架构图、RAG 数据流、信任边界与 STRIDE 风险清单见 [`docs/Architecture-and-Threat-Model.md`](docs/Architecture-and-Threat-Model.md)。
+
 LLM-VulnHub 是一个面向大语言模型应用安全的漏洞情报平台，用于把公开来源中的原始安全文本转化为可采集、可分析、可复核、可入库、可检索和可问答的 AI / LLM 漏洞资产。
 
 当前平台覆盖的主流程：
@@ -119,10 +121,14 @@ copy .env.example .env
 docker compose up --build
 ```
 
-默认访问地址：
+`.env.example` 默认让 Docker 自动分配空闲的主机端口。启动后查询实际地址：
 
-- 前端：http://127.0.0.1:3000
-- API 文档：http://127.0.0.1:8000/docs
+```powershell
+docker compose port frontend 3000
+docker compose port backend 8000
+```
+
+浏览器端通过前端的 `/api/v1` 同源代理访问后端，避免随机端口变化或跨域配置影响页面请求。
 
 停止：
 
@@ -139,9 +145,15 @@ docker compose down -v
 如果端口冲突，可以在 `.env` 中调整：
 
 ```env
-NEXT_PUBLIC_API_BASE=http://localhost:8000/api/v1
+FRONTEND_PORT=0
+BACKEND_PORT=0
+POSTGRES_PORT=0
+REDIS_PORT=0
+NEXT_PUBLIC_API_BASE=/api/v1
 INTERNAL_API_BASE=http://backend:8000/api/v1
 ```
+
+`0` 表示由 Docker 自动分配空闲主机端口；`INTERNAL_API_BASE` 始终使用容器网络中的 `backend:8000`。
 
 ## 手动启动
 
