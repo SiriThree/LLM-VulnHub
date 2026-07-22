@@ -397,15 +397,3 @@ Remove-Item backend\celerybeat-schedule.* -Force
 ### GitHub Advisory 限流
 
 配置 `GITHUB_TOKEN`。公开 Advisory 读取场景通常只需要最小只读能力。
-
-## 当前状态
-
-当前版本已经覆盖完整演示闭环，并完成了近期页面与 RAG 优化：
-
-- 自动保存页面草稿。
-- RAG 多语言语义检索与向量重建。
-- RAG 问答页面优化。
-- 情报池、漏洞库、动态采集、运行运营页面显示优化。
-- 漏洞库分页浏览。
-- 前端本地 SSR API 基址修复，减少页面切换和服务端请求卡顿。
-
