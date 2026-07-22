@@ -298,7 +298,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               ))}
             </select>
             <div className="text-sm text-slate-500">当前 {items.length} 条</div>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <span className="text-sm text-slate-500">已选择 {selectedIds.length} 条</span>
               <Button
                 type="button"
@@ -340,7 +340,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               全选
             </label>
           </div>
-          <div className="max-h-[74vh] overflow-auto">
+          <div>
             {items.length > 0 ? items.map((item) => (
               <div
                 key={item.id}
@@ -355,7 +355,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                         分类 {item.triage_category} | 置信度 {Math.round(item.triage_confidence * 100)}%
                       </div>
                     </div>
-                    <span className="rounded bg-white px-2 py-1 text-xs">{STATUS_LABELS[item.status] ?? item.status}</span>
+                    <span className="shrink-0 whitespace-nowrap rounded bg-white px-2 py-1 text-xs">{STATUS_LABELS[item.status] ?? item.status}</span>
                   </div>
                 </button>
               </div>
@@ -390,7 +390,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                     ) : null}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex shrink-0 gap-2">
                   <Button type="button" onClick={approve} disabled={submitting || !canApproveSelected}>
                     <Check size={16} />
                     确认入库

@@ -311,16 +311,19 @@ export default function CollectorsPage() {
                     </div>
                   </div>
                   {doc.status === "pending_review" ? (
-                    <div className="flex gap-2">
+                    <div className="flex w-[192px] shrink-0 items-center justify-end gap-2">
                       <Button className="h-8" onClick={() => approve(doc.id)} disabled={submitting}>
                         确认入库
                       </Button>
-                      <Link className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm text-slate-700" href={`/intel-pool?selected=${doc.id}&status=pending_review`}>
+                      <Link
+                        className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border px-3 text-sm text-slate-700"
+                        href={`/intel-pool?selected=${doc.id}&status=pending_review`}
+                      >
                         去复核
                       </Link>
                     </div>
                   ) : (
-                    <Link className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm text-slate-700" href="/tasks">
+                    <Link className="inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-md border border-border px-3 text-sm text-slate-700" href="/tasks">
                       看任务
                     </Link>
                   )}
