@@ -67,6 +67,7 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div><span className="text-slate-500">来源：</span>{vulnerability.source || "未填写"}</div>
             <div><span className="text-slate-500">标签：</span>{vulnerability.tags.join("、") || "暂无"}</div>
+            <div><span className="text-slate-500">可见范围：</span>{vulnerability.visibility}</div>
             <div className="col-span-2">
               <span className="text-slate-500">参考链接：</span>
               {isSafeExternalUrl(vulnerability.reference_url) ? (

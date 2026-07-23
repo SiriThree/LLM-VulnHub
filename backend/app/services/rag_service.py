@@ -1,8 +1,11 @@
+import hashlib
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.input_security import UNTRUSTED_INPUT_POLICY, sanitize_plain_text, wrap_untrusted_content
-from app.db.models import DocumentChunk, Vulnerability
+from app.core.input_security import UNTRUSTED_INPUT_POLICY, redact_sensitive_text, sanitize_plain_text, wrap_untrusted_content
+from app.core.security import allowed_visibilities
+from app.db.models import DocumentChunk, RagQueryAudit, Vulnerability
 from app.schemas.vulnerability import VulnerabilityRead
 from app.services.embedding_service import cosine_similarity, embed_text, tokenize
 from app.services.llm_service import LLMClient
@@ -38,12 +41,15 @@ def _search_text(chunk: DocumentChunk) -> str:
     )
 
 
-def search_similar(db: Session, query: str, top_k: int = 5) -> list[dict]:
+def search_similar(db: Session, query: str, top_k: int, *, role: str) -> list[dict]:
     query = sanitize_plain_text(query, max_chars=1_000)
     q_emb = embed_text(query)
     chunks = db.scalars(
-        select(DocumentChunk).options(
-            selectinload(DocumentChunk.vulnerability).selectinload(Vulnerability.tags),
+        select(DocumentChunk)
+        .join(DocumentChunk.vulnerability)
+        .where(Vulnerability.visibility.in_(allowed_visibilities(role)))
+        .options(
+            selectinload(DocumentChunk.vulnerability).selectinload(Vulnerability.tags)
         )
     ).all()
     hits = []
@@ -68,6 +74,31 @@ def search_similar(db: Session, query: str, top_k: int = 5) -> list[dict]:
     return sorted(hits, key=lambda x: x["similarity"], reverse=True)[:top_k]
 
 
+def record_rag_audit(
+    db: Session,
+    *,
+    actor: str,
+    role: str,
+    action: str,
+    query: str,
+    top_k: int,
+    hits: list[dict],
+) -> None:
+    sanitized = sanitize_plain_text(query, max_chars=1_000)
+    db.add(
+        RagQueryAudit(
+            actor=actor,
+            role=role,
+            action=action,
+            query_hash=hashlib.sha256(sanitized.encode("utf-8")).hexdigest(),
+            query_excerpt=redact_sensitive_text(sanitized)[:160],
+            hit_ids=[int(hit["vulnerability"].id) for hit in hits],
+            top_k=top_k,
+        )
+    )
+    db.commit()
+
+
 def _format_hit(index: int, hit: dict) -> str:
     vuln = hit["vulnerability"]
     return "\n".join(
@@ -86,10 +117,19 @@ def _format_hit(index: int, hit: dict) -> str:
     )
 
 
-async def ask(db: Session, question: str, top_k: int = 5) -> dict:
+async def ask(db: Session, question: str, top_k: int, *, actor: str, role: str) -> dict:
     question = sanitize_plain_text(question, max_chars=1_000)
-    hits = search_similar(db, question, top_k)
+    hits = search_similar(db, question, top_k, role=role)
     usable_hits = [hit for hit in hits if hit["similarity"] >= 0.08] or hits[: min(3, len(hits))]
+    record_rag_audit(
+        db,
+        actor=actor,
+        role=role,
+        action="ask",
+        query=question,
+        top_k=top_k,
+        hits=usable_hits,
+    )
 
     if not usable_hits:
         return {

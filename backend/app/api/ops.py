@@ -41,7 +41,7 @@ def metrics(
 @router.get("/scheduler", response_model=SchedulerOverviewRead)
 def scheduler(
     db: Session = Depends(get_db),
-    identity: RequestIdentity = Depends(require_role("viewer")),
+    identity: RequestIdentity = Depends(require_role("analyst")),
 ):
     return get_scheduler_overview(db)
 
@@ -49,7 +49,7 @@ def scheduler(
 @router.get("/dead-letter", response_model=list[DeadLetterTaskRead])
 def dead_letter(
     db: Session = Depends(get_db),
-    identity: RequestIdentity = Depends(require_role("viewer")),
+    identity: RequestIdentity = Depends(require_role("analyst")),
 ):
     return list_dead_letter_tasks(db)
 

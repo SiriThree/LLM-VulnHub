@@ -2,6 +2,7 @@ import asyncio
 import html
 import ipaddress
 import json
+import re
 import socket
 import unicodedata
 from pathlib import Path
@@ -39,6 +40,19 @@ _REMOVED_TAGS = {
     "script", "style", "noscript", "svg", "iframe", "object", "embed", "template", "form", "head", "nav", "footer"
 }
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+_SENSITIVE_PATTERNS = (
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL),
+    re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}"),
+    re.compile(
+        r"(?i)\b(?:api[_-]?key|access[_-]?token|secret|password|passwd|authorization)"
+        r"\s*[:=]\s*[\"']?[^\s,\"';]{6,}"
+    ),
+    re.compile(r"(?i)\bhttps?://[^\s/:@]+:[^@\s/]+@"),
+)
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _LOCAL_SOURCE_ROOTS = tuple(path.resolve() for path in {_PROJECT_ROOT / "data", Path("/data")})
@@ -128,8 +142,17 @@ def sanitize_plain_text(value: str, *, max_chars: int = MAX_UNTRUSTED_TEXT_CHARS
     return " ".join(text.replace("\r", " ").replace("\n", " ").split())[:max_chars]
 
 
+def redact_sensitive_text(value: str, *, secret_values: tuple[str, ...] = ()) -> str:
+    text = str(value or "")
+    for secret_value in sorted({item for item in secret_values if item and len(item) >= 6}, key=len, reverse=True):
+        text = text.replace(secret_value, "[REDACTED_SECRET]")
+    for pattern in _SENSITIVE_PATTERNS:
+        text = pattern.sub("[REDACTED_SECRET]", text)
+    return text
+
+
 def wrap_untrusted_content(label: str, value: str, *, max_chars: int = MAX_UNTRUSTED_TEXT_CHARS) -> str:
-    cleaned = sanitize_plain_text(value, max_chars=max_chars)
+    cleaned = redact_sensitive_text(sanitize_plain_text(value, max_chars=max_chars))
     cleaned = cleaned.replace(UNTRUSTED_START, "[boundary removed]").replace(UNTRUSTED_END, "[boundary removed]")
     metadata = json.dumps({"label": str(label)[:80], "length": len(cleaned)}, ensure_ascii=False)
     return f"{UNTRUSTED_START}\nmetadata={metadata}\n{cleaned}\n{UNTRUSTED_END}"

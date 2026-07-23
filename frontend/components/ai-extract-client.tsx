@@ -94,6 +94,7 @@ function buildPayload(result: EditableExtract): Omit<Vulnerability, "id" | "crea
     source_url: result.source_url ?? null,
     confidence: Number(result.confidence ?? 0),
     status: String(result.status ?? "待人工复核"),
+    visibility: result.visibility ?? "internal",
     tags: result.tags ?? [],
   };
 }

@@ -13,7 +13,10 @@ router = APIRouter(prefix="/sources", tags=["sources"])
 
 
 @router.get("", response_model=list[DataSourceRead])
-def list_sources(db: Session = Depends(get_db)):
+def list_sources(
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     return db.scalars(select(DataSource).order_by(DataSource.created_at.desc())).all()
 
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.security import RequestIdentity, require_role
+from app.core.security import RequestIdentity, allowed_visibilities, can_access_visibility, require_role
 from app.db.models import IntelligenceItem, Vulnerability, VulnerabilityOccurrence
 from app.db.session import get_db
 from app.schemas.vulnerability import (
@@ -36,18 +36,26 @@ def list_api(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("viewer")),
 ):
-    items, total = list_vulnerabilities(db, q, severity, vuln_type, component, status, page, page_size)
+    items, total = list_vulnerabilities(db, q, severity, vuln_type, component, status, page, page_size, identity.role)
     return {"items": [serialize_vulnerability(v) for v in items], "total": total, "page": page, "page_size": page_size}
 
 
 @router.get("/dashboard", response_model=DashboardStats)
-def dashboard_api(db: Session = Depends(get_db)):
-    return dashboard_stats(db)
+def dashboard_api(
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("viewer")),
+):
+    return dashboard_stats(db, identity.role)
 
 
 @router.get("/{vuln_id}", response_model=VulnerabilityDetailRead)
-def get_api(vuln_id: int, db: Session = Depends(get_db)):
+def get_api(
+    vuln_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("viewer")),
+):
     vuln = (
         db.query(Vulnerability)
         .options(
@@ -60,7 +68,7 @@ def get_api(vuln_id: int, db: Session = Depends(get_db)):
             .selectinload(IntelligenceItem.collected_document),
             selectinload(Vulnerability.analyses),
         )
-        .filter(Vulnerability.id == vuln_id)
+        .filter(Vulnerability.id == vuln_id, Vulnerability.visibility.in_(allowed_visibilities(identity.role)))
         .first()
     )
     if not vuln:
@@ -69,7 +77,11 @@ def get_api(vuln_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{vuln_id}/lineage", response_model=VulnerabilityLineageRead)
-def get_lineage_api(vuln_id: int, db: Session = Depends(get_db)):
+def get_lineage_api(
+    vuln_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("viewer")),
+):
     vuln = (
         db.query(Vulnerability)
         .options(
@@ -80,7 +92,7 @@ def get_lineage_api(vuln_id: int, db: Session = Depends(get_db)):
             .selectinload(VulnerabilityOccurrence.intelligence_item)
             .selectinload(IntelligenceItem.collected_document),
         )
-        .filter(Vulnerability.id == vuln_id)
+        .filter(Vulnerability.id == vuln_id, Vulnerability.visibility.in_(allowed_visibilities(identity.role)))
         .first()
     )
     if not vuln:
@@ -94,6 +106,8 @@ def create_api(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
+    if payload.visibility == "restricted" and identity.role != "admin":
+        raise HTTPException(403, "only admins can create restricted records")
     return serialize_vulnerability(create_vulnerability(db, payload))
 
 
@@ -104,6 +118,11 @@ def update_api(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
+    existing = db.get(Vulnerability, vuln_id)
+    if not existing or not can_access_visibility(identity.role, existing.visibility):
+        raise HTTPException(404, "vulnerability not found")
+    if payload.visibility == "restricted" and identity.role != "admin":
+        raise HTTPException(403, "only admins can mark records as restricted")
     vuln = update_vulnerability(db, vuln_id, payload)
     if not vuln:
         raise HTTPException(404, "vulnerability not found")

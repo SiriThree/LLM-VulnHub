@@ -2,7 +2,7 @@ from copy import deepcopy
 
 
 SECURITY_MODEL = {
-    "version": "2.0",
+    "version": "3.0",
     "scope": "覆盖外部情报采集、模型分析、人工复核、正式入库与 RAG 知识复用链路。",
     "business_flow": [
         "外部数据源",
@@ -90,9 +90,9 @@ SECURITY_MODEL = {
             "id": "T4", "category": "信息泄露", "title": "模型上下文泄露",
             "scenario": "内部漏洞、密钥或环境信息被拼入第三方模型请求或返回给无权用户。",
             "impact": "敏感数据和访问凭据泄露。",
-            "current_controls": ["密钥使用环境变量", "RAG 只检索漏洞库"],
-            "recommended_controls": ["出站字段分级与脱敏", "最小化上下文", "密钥轮换"],
-            "priority": "严重", "status": "部分实施",
+            "current_controls": ["模型出口统一密钥脱敏", "提示内容不写入分析轨迹", "上下文与字段硬上限", "原始情报仅 analyst 可读", "密钥使用环境变量"],
+            "recommended_controls": ["接入企业 DLP 规则", "自动密钥轮换", "第三方模型数据驻留策略"],
+            "priority": "严重", "status": "已实施",
         },
         {
             "id": "T5", "category": "拒绝服务", "title": "资源与额度耗尽",
@@ -106,9 +106,9 @@ SECURITY_MODEL = {
             "id": "T6", "category": "权限提升", "title": "演示身份头伪造",
             "scenario": "攻击者伪造角色请求头，执行发布、合并或配置修改。",
             "impact": "未授权修改正式漏洞数据和系统配置。",
-            "current_controls": ["服务端角色检查", "关键接口角色要求"],
-            "recommended_controls": ["正式身份认证", "不可伪造会话", "关键操作二次确认"],
-            "priority": "严重", "status": "规划中",
+            "current_controls": ["环境密码登录", "Redis 随机会话", "HttpOnly / SameSite=Strict Cookie", "写操作 CSRF 校验", "服务端 RBAC", "登录失败限速"],
+            "recommended_controls": ["接入企业 OIDC 与 MFA", "高风险操作二次确认", "集中会话设备管理"],
+            "priority": "严重", "status": "已实施",
         },
         {
             "id": "T7", "category": "篡改", "title": "向量库数据投毒",
@@ -122,9 +122,9 @@ SECURITY_MODEL = {
             "id": "T8", "category": "信息泄露", "title": "越权知识检索",
             "scenario": "攻击者通过组合查询枚举库内记录，或在未来多租户场景跨边界检索。",
             "impact": "敏感漏洞、内部文档或租户数据泄露。",
-            "current_controls": ["回答展示引用记录", "限制召回数量"],
-            "recommended_controls": ["检索前记录级授权", "敏感查询审计", "强制租户过滤"],
-            "priority": "严重", "status": "规划中",
+            "current_controls": ["记录 public/internal/restricted 分级", "向量召回前按会话角色过滤", "查询哈希与命中 ID 审计", "查询摘录脱敏", "回答展示授权范围内引用"],
+            "recommended_controls": ["多租户上线前增加 tenant_id 强制过滤", "异常枚举查询告警", "按账户查询频率限制"],
+            "priority": "严重", "status": "已实施",
         },
         {
             "id": "T9", "category": "篡改", "title": "危险工具指令",
@@ -164,13 +164,13 @@ SECURITY_MODEL = {
         "问题和证据均使用不可信边界封装，并明确禁止执行其中的指令",
         "限制召回数量、片段长度与总上下文",
         "回答引用必须映射到本次召回记录",
-        "先做记录级权限过滤，再执行语义检索",
+        "根据可信会话角色和记录可见级别过滤后，再执行语义检索",
         "模型回答不得直接触发工具或数据库写入",
-        "记录查询、命中记录、模型版本与耗时",
+        "脱敏记录查询摘要、查询哈希、角色和命中记录",
         "证据不足或模型异常时降级为检索结果",
     ],
     "release_baseline": [
-        "用正式认证与 RBAC 替换演示型角色请求头",
+        "生产环境配置三类账户强密码，并通过 HTTPS 启用 Secure Cookie",
         "限制生产环境 CORS 来源并关闭不需要的调试入口",
         "为正文、上下文、模型调用和任务重试设置硬上限",
         "确保只有复核通过的记录进入 RAG 索引",

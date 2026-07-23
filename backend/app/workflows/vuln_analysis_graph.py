@@ -9,7 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
-from app.core.input_security import MAX_LONG_FIELD_CHARS, sanitize_plain_text
+from app.core.input_security import MAX_LONG_FIELD_CHARS, redact_sensitive_text, sanitize_plain_text
 from app.db.models import AgentExecution, AnalysisJob
 from app.schemas.vulnerability import VulnerabilityCreate
 from app.services.llm_service import LLMClient
@@ -190,7 +190,9 @@ def keyword_set(text: str) -> set[str]:
 
 
 def safe_similar_hits(db: Session, query: str, top_k: int = 5) -> list[dict[str, Any]]:
-    hits = search_similar(db, query, top_k)
+    # Analysis results are reviewed by analysts, so restricted records must
+    # never enter their candidate context.
+    hits = search_similar(db, query, top_k, role="analyst")
     result: list[dict[str, Any]] = []
     for hit in hits:
         vulnerability = hit["vulnerability"]
@@ -345,7 +347,7 @@ def sanitize_agent_output(value: Any, *, depth: int = 0) -> Any:
     if depth > 6:
         return None
     if isinstance(value, str):
-        return sanitize_plain_text(value, max_chars=MAX_LONG_FIELD_CHARS)
+        return redact_sensitive_text(sanitize_plain_text(value, max_chars=MAX_LONG_FIELD_CHARS))
     if isinstance(value, list):
         return [sanitize_agent_output(item, depth=depth + 1) for item in value[:100]]
     if isinstance(value, dict):
@@ -370,8 +372,9 @@ async def run_json_agent(
     provider = client._provider_config()  # noqa: SLF001
     input_payload = {
         "prompt_key": prompt_spec.key,
-        "system_prompt": prompt_spec.system_prompt,
-        "user_prompt": user_prompt,
+        "user_prompt_hash": hashlib.sha256(user_prompt.encode("utf-8")).hexdigest(),
+        "user_prompt_chars": len(user_prompt),
+        "prompt_content_stored": False,
         "required_keys": list(prompt_spec.required_keys),
         "max_attempts": settings.agent_max_attempts,
     }

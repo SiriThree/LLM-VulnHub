@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
+from app.core.input_security import redact_sensitive_text
 
 
 AI_KEYWORDS = [
@@ -177,7 +178,21 @@ class LLMClient:
             can_call_remote=can_call_remote,
         )
 
+    def _redact_prompt(self, value: str) -> str:
+        secret_values = tuple(
+            secret
+            for secret in (
+                self.settings.openai_api_key,
+                self.settings.deepseek_api_key,
+                self.settings.github_token,
+            )
+            if secret
+        )
+        return redact_sensitive_text(value, secret_values=secret_values)
+
     async def chat_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        system_prompt = self._redact_prompt(system_prompt)
+        user_prompt = self._redact_prompt(user_prompt)
         provider = self._provider_config()
         if provider.name != "mock" and provider.api_key:
             try:
@@ -218,6 +233,8 @@ class LLMClient:
         return payload
 
     async def chat_text(self, system_prompt: str, user_prompt: str) -> str:
+        system_prompt = self._redact_prompt(system_prompt)
+        user_prompt = self._redact_prompt(user_prompt)
         provider = self._provider_config()
         if provider.name != "mock" and provider.api_key:
             try:

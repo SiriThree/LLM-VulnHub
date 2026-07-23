@@ -26,6 +26,7 @@ def list_notifications(
     acknowledged: bool | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
     db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
 ):
     return {"items": list_notification_events(db, event_type=event_type, status=status, acknowledged=acknowledged, limit=limit)}
 
@@ -37,7 +38,7 @@ def acknowledge(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    item = acknowledge_notification(db, task_id, actor=payload.actor or identity.actor, note=payload.note)
+    item = acknowledge_notification(db, task_id, actor=identity.actor, note=payload.note)
     if not item:
         raise HTTPException(404, "notification not found")
     return item
@@ -61,4 +62,4 @@ def batch_acknowledge(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": batch_acknowledge_notifications(db, payload.task_ids, actor=payload.actor or identity.actor, note=payload.note)}
+    return {"items": batch_acknowledge_notifications(db, payload.task_ids, actor=identity.actor, note=payload.note)}
