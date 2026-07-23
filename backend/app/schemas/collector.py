@@ -135,5 +135,14 @@ class CollectorOverviewRead(BaseModel):
     queue_metrics: dict[str, int]
     source_health: list[SourceHealthRead]
     recent_runs: list[CollectorRecentRunRead]
+    recent_runs_total: int
+    recent_runs_page: int
+    recent_runs_page_size: int
     pending_documents: list[CollectedDocumentRead]
+    pending_documents_total: int
+    pending_documents_page: int
+    pending_documents_page_size: int
     recent_documents: list[CollectedDocumentRead]
+    recent_documents_total: int
+    recent_documents_page: int
+    recent_documents_page_size: int

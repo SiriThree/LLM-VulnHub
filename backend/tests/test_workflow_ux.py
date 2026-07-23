@@ -10,12 +10,13 @@ from app.db.models import (
     IntelligenceItem,
     MergeCandidate,
     ReviewAction,
+    Task,
     Vulnerability,
     VulnerabilityOccurrence,
 )
 from app.db.session import Base
 from app.schemas.collector import DataSourceCreate
-from app.services.collector_service import DuplicateSourceError, create_source
+from app.services.collector_service import DuplicateSourceError, create_source, get_collector_overview
 from app.services.intel_service import (
     approve_intelligence_item,
     approve_merge_candidate,
@@ -50,6 +51,51 @@ class WorkflowUxTests(unittest.TestCase):
                 self.db,
                 payload.model_copy(update={"name": "Duplicate name"}),
             )
+
+    def test_collector_overview_lists_have_independent_pagination(self):
+        for index in range(12):
+            self.db.add(
+                CollectedDocument(
+                    title=f"Document {index}",
+                    raw_text="evidence",
+                    content_hash=f"{index:064d}",
+                    status="pending_review",
+                )
+            )
+            self.db.add(
+                Task(
+                    task_type="crawl",
+                    status="success",
+                    output_data={
+                        "source_runs": [
+                            {
+                                "source_id": index + 1,
+                                "source_name": f"Source {index}",
+                                "source_type": "rss",
+                                "status": "success",
+                            }
+                        ]
+                    },
+                )
+            )
+        self.db.commit()
+
+        overview = get_collector_overview(
+            self.db,
+            pending_page=2,
+            pending_page_size=5,
+            recent_page=2,
+            recent_page_size=5,
+            runs_page=2,
+            runs_page_size=5,
+        )
+
+        self.assertEqual(overview["pending_documents_total"], 12)
+        self.assertEqual(len(overview["pending_documents"]), 5)
+        self.assertEqual(overview["recent_documents_total"], 12)
+        self.assertEqual(len(overview["recent_documents"]), 5)
+        self.assertEqual(overview["recent_runs_total"], 12)
+        self.assertEqual(len(overview["recent_runs"]), 5)
 
     def test_reviewed_items_and_merge_candidates_cannot_be_approved_twice(self):
         vulnerability = Vulnerability(title="Existing vulnerability")

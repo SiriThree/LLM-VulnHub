@@ -70,6 +70,56 @@ function TrustBadge({ source }: { source: SourceHealth }) {
   return <span className={`rounded px-2 py-1 text-xs font-medium ${tone}`}>可信度 {source.trust_score}</span>;
 }
 
+function ListPager({
+  total,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  total: number;
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-sm">
+      <span className="text-slate-500">共 {total} 条 · 第 {page} / {pageCount} 页</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2 text-slate-500">
+          每页
+          <select
+            className="h-8 rounded-md border border-border bg-white px-2 text-slate-700"
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            <option value={5}>5 条</option>
+            <option value={10}>10 条</option>
+          </select>
+        </label>
+        <Button
+          type="button"
+          className="h-8 border border-border bg-white text-slate-700"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          上一页
+        </Button>
+        <Button
+          type="button"
+          className="h-8 border border-border bg-white text-slate-700"
+          disabled={page >= pageCount}
+          onClick={() => onPageChange(page + 1)}
+        >
+          下一页
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function CollectorsPage() {
   const [sources, setSources] = useState<DataSource[]>([]);
   const [overview, setOverview] = useState<CollectorOverview | null>(null);
@@ -80,6 +130,12 @@ export default function CollectorsPage() {
   const [sourcePage, setSourcePage] = useState(1);
   const [sourcePageSize, setSourcePageSize] = useState(10);
   const [sourceTotal, setSourceTotal] = useState(0);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [pendingPageSize, setPendingPageSize] = useState(5);
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentPageSize, setRecentPageSize] = useState(5);
+  const [runsPage, setRunsPage] = useState(1);
+  const [runsPageSize, setRunsPageSize] = useState(5);
   const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<SourceEditForm | null>(null);
   const [form, setForm, { clearDraft: clearSourceDraft }] = useSessionDraft(
@@ -88,6 +144,14 @@ export default function CollectorsPage() {
   );
 
   async function load() {
+    const overviewQuery = new URLSearchParams({
+      pending_page: String(pendingPage),
+      pending_page_size: String(pendingPageSize),
+      recent_page: String(recentPage),
+      recent_page_size: String(recentPageSize),
+      runs_page: String(runsPage),
+      runs_page_size: String(runsPageSize),
+    });
     const [sourceList, overviewRes, taskList] = await Promise.all([
       api<DataSourceListResponse>(`/sources?page=${sourcePage}&page_size=${sourcePageSize}`).catch(() => ({
         items: [],
@@ -95,7 +159,7 @@ export default function CollectorsPage() {
         page: sourcePage,
         page_size: sourcePageSize,
       })),
-      api<CollectorOverview>("/collectors/overview").catch(() => null),
+      api<CollectorOverview>(`/collectors/overview?${overviewQuery}`).catch(() => null),
       api<TaskListResponse>("/tasks?page_size=50").catch(() => ({
         items: [],
         total: 0,
@@ -107,6 +171,11 @@ export default function CollectorsPage() {
     setSources(sourceList.items);
     setSourceTotal(sourceList.total);
     setOverview(overviewRes);
+    if (overviewRes) {
+      setPendingPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.pending_documents_total / pendingPageSize))));
+      setRecentPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.recent_documents_total / recentPageSize))));
+      setRunsPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.recent_runs_total / runsPageSize))));
+    }
     setTasks(taskList.items.filter((task) => task.task_type === "crawl").slice(0, 8));
   }
 
@@ -114,7 +183,7 @@ export default function CollectorsPage() {
     load();
     const timer = window.setInterval(load, 5000);
     return () => window.clearInterval(timer);
-  }, [sourcePage, sourcePageSize]);
+  }, [sourcePage, sourcePageSize, pendingPage, pendingPageSize, recentPage, recentPageSize, runsPage, runsPageSize]);
 
   useEffect(() => {
     api<AuthSession>("/auth/status")
@@ -241,6 +310,7 @@ export default function CollectorsPage() {
 
   const pendingDocs = overview?.pending_documents ?? [];
   const recentDocs = overview?.recent_documents ?? [];
+  const recentRuns = overview?.recent_runs ?? [];
   const sourceHealth = overview?.source_health ?? [];
 
   return (
@@ -595,6 +665,16 @@ export default function CollectorsPage() {
             ))}
             {pendingDocs.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有待处理文档。</div> : null}
           </div>
+          <ListPager
+            total={overview?.pending_documents_total ?? 0}
+            page={pendingPage}
+            pageSize={pendingPageSize}
+            onPageChange={setPendingPage}
+            onPageSizeChange={(value) => {
+              setPendingPage(1);
+              setPendingPageSize(value);
+            }}
+          />
         </Card>
 
         <Card className="space-y-4">
@@ -616,7 +696,18 @@ export default function CollectorsPage() {
                 </div>
               </div>
             ))}
+            {recentDocs.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有采集结果。</div> : null}
           </div>
+          <ListPager
+            total={overview?.recent_documents_total ?? 0}
+            page={recentPage}
+            pageSize={recentPageSize}
+            onPageChange={setRecentPage}
+            onPageSizeChange={(value) => {
+              setRecentPage(1);
+              setRecentPageSize(value);
+            }}
+          />
         </Card>
       </div>
 
@@ -626,7 +717,7 @@ export default function CollectorsPage() {
           <h2 className="font-semibold">最近运行轨迹</h2>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {(overview?.recent_runs ?? []).map((run) => (
+          {recentRuns.map((run) => (
             <div key={`${run.task_id}-${run.source_id}-${run.source_name}`} className="rounded-md border border-border p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -666,7 +757,18 @@ export default function CollectorsPage() {
               )}
             </div>
           ))}
+          {recentRuns.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有运行轨迹。</div> : null}
         </div>
+        <ListPager
+          total={overview?.recent_runs_total ?? 0}
+          page={runsPage}
+          pageSize={runsPageSize}
+          onPageChange={setRunsPage}
+          onPageSizeChange={(value) => {
+            setRunsPage(1);
+            setRunsPageSize(value);
+          }}
+        />
       </Card>
 
     </div>

@@ -460,8 +460,17 @@ export type CollectorOverview = {
   queue_metrics: Record<string, number>;
   source_health: SourceHealth[];
   recent_runs: CollectorRecentRun[];
+  recent_runs_total: number;
+  recent_runs_page: number;
+  recent_runs_page_size: number;
   pending_documents: CollectedDocument[];
+  pending_documents_total: number;
+  pending_documents_page: number;
+  pending_documents_page_size: number;
   recent_documents: CollectedDocument[];
+  recent_documents_total: number;
+  recent_documents_page: number;
+  recent_documents_page_size: number;
 };
 
 export type IntelligenceLineage = {
