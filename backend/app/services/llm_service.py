@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
+from app.core.input_security import redact_sensitive_text
 
 
 AI_KEYWORDS = [
@@ -177,7 +178,21 @@ class LLMClient:
             can_call_remote=can_call_remote,
         )
 
+    def _redact_prompt(self, value: str) -> str:
+        secret_values = tuple(
+            secret
+            for secret in (
+                self.settings.openai_api_key,
+                self.settings.deepseek_api_key,
+                self.settings.github_token,
+            )
+            if secret
+        )
+        return redact_sensitive_text(value, secret_values=secret_values)
+
     async def chat_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        system_prompt = self._redact_prompt(system_prompt)
+        user_prompt = self._redact_prompt(user_prompt)
         provider = self._provider_config()
         if provider.name != "mock" and provider.api_key:
             try:
@@ -218,6 +233,8 @@ class LLMClient:
         return payload
 
     async def chat_text(self, system_prompt: str, user_prompt: str) -> str:
+        system_prompt = self._redact_prompt(system_prompt)
+        user_prompt = self._redact_prompt(user_prompt)
         provider = self._provider_config()
         if provider.name != "mock" and provider.api_key:
             try:
@@ -401,6 +418,23 @@ class LLMClient:
         }
 
     def _mock_text(self, prompt: str) -> str:
+        if "可用漏洞库记录" in prompt:
+            title_matches = re.findall(r"\[(\d+)\] 标题：(.+)", prompt)
+            mitigation_matches = re.findall(r"修复建议：(.+)", prompt)
+            impact_matches = re.findall(r"影响：(.+)", prompt)
+            titles = title_matches[:3]
+            refs = "\n".join(f"- [{idx}] {title}" for idx, title in titles)
+            mitigation = mitigation_matches[0] if mitigation_matches else "需要结合命中的漏洞记录补充隔离、权限校验、审计和输入过滤措施。"
+            impact = impact_matches[0] if impact_matches else "命中记录显示该类问题可能影响 LLM / RAG / Agent 链路的安全边界。"
+            return (
+                f"结论：当前问题可以从漏洞库命中的记录中找到相关依据，重点风险是：{impact} [1]\n\n"
+                f"可执行措施：\n"
+                f"1. 优先按命中记录中的修复建议处理：{mitigation} [1]\n"
+                f"2. 对外部输入、检索内容和工具调用结果做指令隔离，避免把不可信文本直接拼进高权限上下文。[1]\n"
+                f"3. 检查 RAG 检索是否先做权限过滤，再做语义召回；对跨租户、内部知识库和调试 Trace 单独加访问控制。[1]\n"
+                f"4. 对命中组件建立回归测试，覆盖恶意文档、特殊 token、越权查询和异常输入。\n\n"
+                f"参考记录：\n{refs}"
+            )
         if "漏洞库上下文" in prompt or "context" in prompt.lower():
             return "根据漏洞库上下文，风险主要集中在外部输入进入 Prompt、RAG 检索权限不足，以及 Agent 工具调用缺少边界控制。建议采用指令隔离、最小权限、检索过滤和工具审计。"
         return "该漏洞需要优先关注攻击入口、影响范围、敏感数据暴露和修复可行性，并在上线前补充权限校验与审计。"

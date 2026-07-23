@@ -1,11 +1,12 @@
 from pydantic import BaseModel, Field
 
+from app.core.input_security import MAX_REVIEW_NOTE_CHARS, MAX_UNTRUSTED_TEXT_CHARS, MAX_URL_LENGTH
 from app.schemas.vulnerability import VulnerabilityCreate, VulnerabilityRead
 
 
 class ExtractRequest(BaseModel):
-    raw_text: str = Field(min_length=10)
-    source_url: str | None = None
+    raw_text: str = Field(min_length=10, max_length=MAX_UNTRUSTED_TEXT_CHARS)
+    source_url: str | None = Field(default=None, max_length=MAX_URL_LENGTH)
 
 
 class RelevanceResult(BaseModel):
@@ -96,7 +97,7 @@ class ScoreResult(BaseModel):
 
 class ReportRequest(BaseModel):
     vulnerability: VulnerabilityCreate
-    risk_reason: str | None = None
+    risk_reason: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)
 
 
 class ReportResult(BaseModel):
@@ -153,7 +154,7 @@ class EvalRunDetailRead(EvalRunRead):
 class ConfirmAnalysisRequest(BaseModel):
     analysis_job_id: int
     vulnerability: VulnerabilityCreate
-    review_note: str | None = None
+    review_note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)
 
 
 class ConfirmAnalysisResult(BaseModel):

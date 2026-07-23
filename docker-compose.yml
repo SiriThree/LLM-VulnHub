@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: llm_vulnhub
       POSTGRES_PASSWORD: llm_vulnhub
     ports:
-      - "${POSTGRES_PORT:-0}:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql:ro
@@ -14,7 +14,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_PORT:-0}:6379"
+      - "${REDIS_PORT:-6379}:6379"
 
   backend:
     build:
@@ -29,10 +29,15 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
+      AUTH_ANALYST_PASSWORD: ${AUTH_ANALYST_PASSWORD:-}
+      AUTH_VIEWER_PASSWORD: ${AUTH_VIEWER_PASSWORD:-}
+      AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-28800}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       EMBEDDING_CACHE_DIR: /models/fastembed
     ports:
-      - "${BACKEND_PORT:-0}:8000"
+      - "${BACKEND_PORT:-8001}:8000"
     volumes:
       - ./data:/data:ro
     depends_on:
@@ -72,6 +77,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://llm_vulnhub:llm_vulnhub@postgres:5432/llm_vulnhub
       REDIS_URL: redis://redis:6379/0
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      EMBEDDING_CACHE_DIR: /models/fastembed
     depends_on:
       - worker
       - redis
@@ -81,11 +88,12 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api/v1}
+        INTERNAL_API_BASE: http://backend:8000/api/v1
     environment:
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api/v1}
-      INTERNAL_API_BASE: ${INTERNAL_API_BASE:-http://backend:8000/api/v1}
+      INTERNAL_API_BASE: http://backend:8000/api/v1
     ports:
-      - "${FRONTEND_PORT:-0}:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - backend
 

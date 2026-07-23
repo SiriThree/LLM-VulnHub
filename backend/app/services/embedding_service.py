@@ -1,10 +1,15 @@
 import math
+import re
 import warnings
+from collections import Counter
 from functools import lru_cache
 
-from fastembed import TextEmbedding
-
 from app.core.config import get_settings
+
+try:
+    from fastembed import TextEmbedding
+except ImportError:  # pragma: no cover - used only when optional dependency is missing locally.
+    TextEmbedding = None
 
 
 @lru_cache(maxsize=1)
@@ -18,10 +23,46 @@ def get_embedding_model() -> TextEmbedding:
         )
 
 
+def tokenize(text: str) -> list[str]:
+    return [token.lower() for token in TOKEN_RE.findall(text or "")]
+
+
+@lru_cache(maxsize=1)
+def get_embedding_model():
+    if TextEmbedding is None:
+        return None
+
+    settings = get_settings()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*now uses mean pooling instead of CLS embedding.*")
+        return TextEmbedding(
+            model_name=settings.embedding_model,
+            cache_dir=settings.embedding_cache_dir,
+        )
+
+
+def _hash_embed_text(text: str) -> list[float]:
+    dim = get_settings().embedding_dim
+    vector = [0.0] * dim
+    counts = Counter(tokenize(text))
+    for token, count in counts.items():
+        digest = hashlib.sha256(token.encode("utf-8")).digest()
+        idx = int.from_bytes(digest[:4], "big") % dim
+        sign = 1 if digest[4] % 2 == 0 else -1
+        vector[idx] += sign * (1 + math.log(count))
+    norm = math.sqrt(sum(value * value for value in vector)) or 1.0
+    return [round(value / norm, 6) for value in vector]
+
+
 def embed_texts(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
-    vectors = get_embedding_model().embed([text or "" for text in texts])
+
+    model = get_embedding_model()
+    if model is None:
+        return [_hash_embed_text(text) for text in texts]
+
+    vectors = model.embed([text or "" for text in texts])
     return [[round(float(value), 7) for value in vector] for vector in vectors]
 
 

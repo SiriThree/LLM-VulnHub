@@ -17,13 +17,20 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.get("", response_model=TaskListResponse)
-def list_tasks(db: Session = Depends(get_db)):
+def list_tasks(
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     tasks = db.scalars(select(Task).order_by(Task.created_at.desc()).limit(100)).all()
     return {"items": tasks}
 
 
 @router.get("/{task_id}", response_model=TaskRead)
-def get_task(task_id: int, db: Session = Depends(get_db)):
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "task not found")

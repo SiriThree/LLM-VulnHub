@@ -1,5 +1,5 @@
-const BROWSER_API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api/v1";
-const SERVER_API_BASE = process.env.INTERNAL_API_BASE ?? "http://backend:8000/api/v1";
+const BROWSER_API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
+const SERVER_API_BASE = process.env.INTERNAL_API_BASE ?? BROWSER_API_BASE;
 
 export const API_BASE = typeof window === "undefined" ? SERVER_API_BASE : BROWSER_API_BASE;
 
@@ -43,6 +43,7 @@ export type Vulnerability = {
   source_url?: string | null;
   confidence: number;
   status: string;
+  visibility: "public" | "internal" | "restricted";
   tags: string[];
   created_at: string;
   updated_at: string;
@@ -612,9 +613,15 @@ export type TaskListResponse = {
   items: TaskRecord[];
 };
 
-type ActorContext = {
-  actor?: string;
-  role?: string;
+export type AuthSession = {
+  authenticated: boolean;
+  actor?: string | null;
+  role?: "guest" | "viewer" | "analyst" | "admin" | null;
+};
+
+type AuthContext = {
+  session?: string;
+  csrf?: string;
 };
 
 function parseCookieValue(raw: string | undefined): string | undefined {
@@ -626,7 +633,7 @@ function parseCookieValue(raw: string | undefined): string | undefined {
   }
 }
 
-function readBrowserActorContext(): ActorContext {
+function readBrowserAuthContext(): AuthContext {
   if (typeof document === "undefined") return {};
   const cookieMap = Object.fromEntries(
     document.cookie
@@ -640,18 +647,17 @@ function readBrowserActorContext(): ActorContext {
   );
 
   return {
-    actor: cookieMap.llm_vulnhub_actor,
-    role: cookieMap.llm_vulnhub_role,
+    csrf: cookieMap.llm_vulnhub_csrf,
   };
 }
 
-async function readServerActorContext(): Promise<ActorContext> {
+async function readServerAuthContext(): Promise<AuthContext> {
   try {
     const headersModule = await import("next/headers");
     const store = await headersModule.cookies();
     return {
-      actor: store.get("llm_vulnhub_actor")?.value,
-      role: store.get("llm_vulnhub_role")?.value,
+      session: store.get("llm_vulnhub_session")?.value,
+      csrf: store.get("llm_vulnhub_csrf")?.value,
     };
   } catch {
     return {};
@@ -659,18 +665,32 @@ async function readServerActorContext(): Promise<ActorContext> {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const actorContext = typeof window === "undefined" ? await readServerActorContext() : readBrowserActorContext();
+  const authContext = typeof window === "undefined" ? await readServerAuthContext() : readBrowserAuthContext();
+  const method = (init?.method ?? "GET").toUpperCase();
+  const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(actorContext.actor ? { "X-Actor": actorContext.actor } : {}),
-      ...(actorContext.role ? { "X-Role": actorContext.role } : {}),
+      ...(authContext.session
+        ? { Cookie: `llm_vulnhub_session=${authContext.session}; llm_vulnhub_csrf=${authContext.csrf ?? ""}` }
+        : {}),
+      ...(mutating && authContext.csrf ? { "X-CSRF-Token": authContext.csrf } : {}),
       ...(init?.headers ?? {}),
     },
+    credentials: "include",
     cache: "no-store",
   });
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith("/auth/")) {
+      if (typeof window !== "undefined") {
+        const next = `${window.location.pathname}${window.location.search}`;
+        window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+      } else {
+        const navigation = await import("next/navigation");
+        navigation.redirect("/login");
+      }
+    }
     const text = await res.text();
     throw new Error(text || res.statusText);
   }

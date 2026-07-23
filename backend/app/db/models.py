@@ -38,6 +38,7 @@ class Vulnerability(TimestampMixin, Base):
     collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(40), index=True, default="未修复")
+    visibility: Mapped[str] = mapped_column(String(20), index=True, default="internal")
 
     tags: Mapped[list["Tag"]] = relationship(secondary=vulnerability_tags, back_populates="vulnerabilities")
     analyses: Mapped[list["AnalysisRecord"]] = relationship(back_populates="vulnerability", cascade="all, delete-orphan")
@@ -197,6 +198,20 @@ class ReviewAction(Base):
     before_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     after_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     reason: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RagQueryAudit(Base):
+    __tablename__ = "rag_query_audits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor: Mapped[str] = mapped_column(String(120), index=True)
+    role: Mapped[str] = mapped_column(String(20), index=True)
+    action: Mapped[str] = mapped_column(String(20), index=True)
+    query_hash: Mapped[str] = mapped_column(String(64), index=True)
+    query_excerpt: Mapped[str] = mapped_column(String(160), default="")
+    hit_ids: Mapped[list] = mapped_column(JSON, default=list)
+    top_k: Mapped[int] = mapped_column(Integer, default=5)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

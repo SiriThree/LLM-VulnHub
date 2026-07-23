@@ -278,7 +278,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         <div>
           <h1 className="text-2xl font-semibold">情报池</h1>
           <p className="text-sm text-slate-500">
-            动态采集结果先进入情报池，经 AI 判断、结构化抽取、相似合并建议和人工复核后，再发布到正式漏洞库。
+            采集结果先进入情报池，经过相关性判断、字段抽取、相似记录比对和人工复核后，再发布到正式漏洞库。
           </p>
         </div>
         <Button type="button" className="border border-border bg-white text-slate-700" onClick={() => load(selectedId)}>
@@ -326,7 +326,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               ))}
             </select>
             <div className="text-sm text-slate-500">当前 {items.length} 条</div>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <span className="text-sm text-slate-500">已选择 {selectedIds.length} 条</span>
               <Button
                 type="button"
@@ -368,7 +368,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               全选
             </label>
           </div>
-          <div className="max-h-[74vh] overflow-auto">
+          <div>
             {items.length > 0 ? items.map((item) => (
               <div
                 key={item.id}
@@ -383,7 +383,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                         分类 {item.triage_category} | 置信度 {Math.round(item.triage_confidence * 100)}%
                       </div>
                     </div>
-                    <span className="rounded bg-white px-2 py-1 text-xs">{STATUS_LABELS[item.status] ?? item.status}</span>
+                    <span className="shrink-0 whitespace-nowrap rounded bg-white px-2 py-1 text-xs">{STATUS_LABELS[item.status] ?? item.status}</span>
                   </div>
                 </button>
               </div>
@@ -418,7 +418,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                     ) : null}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex shrink-0 gap-2">
                   <Button type="button" onClick={approve} disabled={submitting || !canApproveSelected}>
                     <Check size={16} />
                     确认入库
@@ -442,7 +442,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                   <div className="max-h-72 overflow-auto rounded-md border border-border bg-white p-3 text-sm leading-6">{selected.raw_text}</div>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-sm font-semibold">AI 判断</div>
+                  <div className="text-sm font-semibold">相关性判断</div>
                   <div className="rounded-md border border-border bg-white p-3 text-sm leading-6">
                     <div>判定原因：{selected.triage_reason || "暂无说明"}</div>
                     <div className="mt-2 break-all">来源 URL：{selected.url ?? "-"}</div>

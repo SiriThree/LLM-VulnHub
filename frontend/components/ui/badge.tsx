@@ -22,7 +22,7 @@ export function Badge({ className, children, ...props }: HTMLAttributes<HTMLSpan
               : "bg-slate-100 text-slate-700";
 
   return (
-    <span className={cn("inline-flex items-center rounded px-2 py-1 text-xs font-medium", color, className)} {...props}>
+    <span className={cn("inline-flex shrink-0 items-center whitespace-nowrap rounded px-2 py-1 text-xs font-medium", color, className)} {...props}>
       {text}
     </span>
   );

@@ -1,6 +1,7 @@
 from pathlib import Path
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,8 +31,13 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.1
     llm_fallback_to_mock: bool = True
     github_token: str | None = None
-    default_actor: str = "local-admin"
-    default_role: str = "admin"
+    auth_admin_password: SecretStr | None = None
+    auth_analyst_password: SecretStr | None = None
+    auth_viewer_password: SecretStr | None = None
+    auth_session_ttl_seconds: int = 28_800
+    auth_cookie_secure: bool = False
+    auth_login_max_attempts: int = 5
+    auth_login_window_seconds: int = 300
 
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     embedding_cache_dir: str = "./.cache/fastembed"

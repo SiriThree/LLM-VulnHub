@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -37,16 +37,17 @@ def run_api(
 @router.get("/overview", response_model=CollectorOverviewRead)
 def overview_api(
     db: Session = Depends(get_db),
-    identity: RequestIdentity = Depends(require_role("viewer")),
+    identity: RequestIdentity = Depends(require_role("analyst")),
 ):
     return get_collector_overview(db)
 
 
 @router.get("/documents", response_model=list[CollectedDocumentRead])
 def documents_api(
-    status: str | None = None,
-    limit: int = 100,
+    status: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=100, ge=1, le=200),
     db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
 ):
     stmt = select(CollectedDocument)
     if status:

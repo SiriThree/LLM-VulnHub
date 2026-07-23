@@ -8,6 +8,7 @@ llm_vulnhub.db
 .dev-pids.json
 backend/celerybeat-schedule.*
 backend/artifacts/evals/eval-*.json
+backend/.cache/
 
 node_modules/
 .next/

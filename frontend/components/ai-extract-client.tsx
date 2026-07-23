@@ -95,6 +95,7 @@ function buildPayload(result: EditableExtract): Omit<Vulnerability, "id" | "crea
     source_url: result.source_url ?? null,
     confidence: Number(result.confidence ?? 0),
     status: String(result.status ?? "待人工复核"),
+    visibility: result.visibility ?? "internal",
     tags: result.tags ?? [],
   };
 }
@@ -268,13 +269,18 @@ export function AiExtractClient() {
             <Card className="space-y-4">
               <div>
                 <h2 className="font-semibold">原始漏洞文本</h2>
-                <p className="mt-1 text-sm text-slate-500">输入原文后触发多 Agent 抽取、评分、相似候选过滤和资产影响分析。</p>
+                <p className="mt-1 text-sm text-slate-500">输入原文后执行相关性判断、字段抽取、风险评分和相似记录比对。</p>
               </div>
-              <Textarea className="min-h-[480px]" value={raw} onChange={(event) => setRaw(event.target.value)} />
+              <Textarea
+                className="min-h-[480px]"
+                maxLength={12000}
+                value={raw}
+                onChange={(event) => setRaw(event.target.value)}
+              />
               <div className="flex flex-wrap items-center gap-3">
                 <Button disabled={loading} onClick={handleExtract} type="button">
                   <Bot size={16} />
-                  {loading ? "分析中..." : "AI 解析"}
+                  {loading ? "分析中..." : "开始提取"}
                 </Button>
                 {analysis?.analysis_job ? (
                   <div className="text-sm text-slate-500">
@@ -288,7 +294,7 @@ export function AiExtractClient() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="font-semibold">结构化审阅结果</h2>
-                  <p className="mt-1 text-sm text-slate-500">这里保留 AI 原始抽取结果，你可以逐字段修订后再确认入库。</p>
+                  <p className="mt-1 text-sm text-slate-500">系统保留模型原始结果；请逐字段核对，修订后再确认入库。</p>
                 </div>
                 {modifiedFields.length > 0 ? (
                   <div className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-700">已修改 {modifiedFields.length} 个字段</div>
@@ -299,7 +305,7 @@ export function AiExtractClient() {
                 <>
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="rounded-md border border-border bg-slate-50 p-3">
-                      <div className="text-xs text-slate-500">AI 相关性判断</div>
+                      <div className="text-xs text-slate-500">模型相关性判断</div>
                       <div className="mt-1 font-medium">
                         {analysis?.relevance.is_ai_vulnerability ? "识别为 AI 漏洞文本" : "未识别为 AI 漏洞文本"}
                       </div>
@@ -324,12 +330,14 @@ export function AiExtractClient() {
                           {LONG_FIELDS.has(key) ? (
                             <Textarea
                               className={changed ? "border-amber-300" : ""}
+                              maxLength={12000}
                               value={String(result[key] ?? "")}
                               onChange={(event) => updateField(key, event.target.value)}
                             />
                           ) : (
                             <Input
                               className={changed ? "border-amber-300" : ""}
+                              maxLength={300}
                               value={String(result[key] ?? "")}
                               onChange={(event) => updateField(key, event.target.value)}
                             />
@@ -388,10 +396,11 @@ export function AiExtractClient() {
                       <div className="font-medium">人工修订闭环</div>
                     </div>
                     <p className="text-sm text-slate-500">
-                      原始 AI 抽取结果保存在 analysis job 中，当前表单保存的是人工修订后的正式漏洞记录。
+                      模型原始结果保存在分析任务中，当前表单保存的是人工修订后的正式漏洞记录。
                     </p>
                     <Textarea
                       className="min-h-24"
+                      maxLength={2000}
                       placeholder="填写人工复核说明，例如：补充修复建议、修正漏洞类型、确认是否入库。"
                       value={reviewNote}
                       onChange={(event) => setReviewNote(event.target.value)}
@@ -412,7 +421,7 @@ export function AiExtractClient() {
             <Card className="space-y-4">
               <div className="flex items-center gap-2">
                 <Sparkles size={16} />
-                <h2 className="font-semibold">Agent 执行轨迹</h2>
+                <h2 className="font-semibold">分析执行轨迹</h2>
               </div>
 
               <div className="rounded-md border border-border bg-slate-50 p-3 text-sm text-slate-700">
@@ -455,7 +464,7 @@ export function AiExtractClient() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-semibold">抽取评测集与回归指标</h2>
-                <p className="mt-1 text-sm text-slate-500">用标注样本验证 AI 相关性判断、字段完整率和合并候选质量。</p>
+                <p className="mt-1 text-sm text-slate-500">用标注样本验证相关性判断、字段完整率和合并候选质量。</p>
               </div>
               <Button disabled={evalRunning} onClick={handleRunEval} type="button">
                 <Play size={16} />
