@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHero } from "@/components/page-hero";
 import { Pagination } from "@/components/pagination";
-import { api, NotificationEvent, NotificationListResponse } from "@/lib/api";
+import { api, NotificationEvent, NotificationListResponse, NotificationStats } from "@/lib/api";
 
 const EVENT_LABELS: Record<string, string> = {
   high_risk_pending_review: "高风险待复核",
@@ -31,6 +31,7 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<NotificationStats>({ total: 0, unread: 0 });
 
   async function load() {
     const query = new URLSearchParams();
@@ -39,14 +40,18 @@ export default function NotificationsPage() {
     if (acknowledged) query.set("acknowledged", acknowledged);
     query.set("page", String(page));
     query.set("page_size", String(pageSize));
-    const res = await api<NotificationListResponse>(`/notifications?${query}`).catch(() => ({
-      items: [],
-      total: 0,
-      page,
-      page_size: pageSize,
-    }));
+    const [res, statsRes] = await Promise.all([
+      api<NotificationListResponse>(`/notifications?${query}`).catch(() => ({
+        items: [],
+        total: 0,
+        page,
+        page_size: pageSize,
+      })),
+      api<NotificationStats>("/notifications/stats").catch(() => ({ total: 0, unread: 0 })),
+    ]);
     setItems(res.items);
     setTotal(res.total);
+    setStats(statsRes);
     setSelectedIds((current) => current.filter((id) => res.items.some((item) => item.id === id)));
   }
 
@@ -56,7 +61,6 @@ export default function NotificationsPage() {
 
   const counts = useMemo(
     () => ({
-      unread: items.filter((item) => !item.acknowledged).length,
       highRisk: items.filter((item) => item.event_type === "high_risk_pending_review").length,
       sourceFailure: items.filter((item) => item.event_type === "source_failure").length,
     }),
@@ -108,10 +112,10 @@ export default function NotificationsPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card><div className="text-sm text-slate-500">当页记录</div><div className="mt-3 text-4xl font-semibold">{items.length}</div></Card>
-        <Card><div className="text-sm text-slate-500">未读通知</div><div className="mt-3 text-4xl font-semibold">{counts.unread}</div></Card>
-        <Card><div className="text-sm text-slate-500">高风险待复核</div><div className="mt-3 text-4xl font-semibold">{counts.highRisk}</div></Card>
-        <Card><div className="text-sm text-slate-500">源采集失败</div><div className="mt-3 text-4xl font-semibold">{counts.sourceFailure}</div></Card>
+        <Card><div className="text-sm text-slate-500">通知总数</div><div className="mt-3 text-4xl font-semibold">{stats.total}</div></Card>
+        <Card><div className="text-sm text-slate-500">未读通知总数</div><div className="mt-3 text-4xl font-semibold">{stats.unread}</div></Card>
+        <Card><div className="text-sm text-slate-500">当页高风险待复核</div><div className="mt-3 text-4xl font-semibold">{counts.highRisk}</div></Card>
+        <Card><div className="text-sm text-slate-500">当页源采集失败</div><div className="mt-3 text-4xl font-semibold">{counts.sourceFailure}</div></Card>
       </div>
 
       <div className="grid gap-3 rounded-lg border border-border bg-white p-4 md:grid-cols-5">

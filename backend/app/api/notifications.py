@@ -8,10 +8,12 @@ from app.schemas.notification import (
     NotificationBatchAcknowledgeRequest,
     NotificationEventRead,
     NotificationListResponse,
+    NotificationStatsRead,
 )
 from app.services.notification_service import (
     acknowledge_notification,
     batch_acknowledge_notifications,
+    get_notification_stats,
     list_notification_events,
     unacknowledge_notification,
 )
@@ -38,6 +40,14 @@ def list_notifications(
         page_size=page_size,
     )
     return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/stats", response_model=NotificationStatsRead)
+def notification_stats(
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
+    return get_notification_stats(db)
 
 
 @router.post("/{task_id}/acknowledge", response_model=NotificationEventRead)

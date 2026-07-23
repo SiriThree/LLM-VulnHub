@@ -35,6 +35,11 @@ class NotificationListResponse(BaseModel):
     page_size: int
 
 
+class NotificationStatsRead(BaseModel):
+    total: int
+    unread: int
+
+
 class NotificationAcknowledgeRequest(BaseModel):
     actor: str = Field(default="analyst", min_length=1, max_length=120)
     note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)

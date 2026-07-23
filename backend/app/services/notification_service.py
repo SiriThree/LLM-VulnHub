@@ -63,6 +63,15 @@ def list_notification_events(
     return items[start:start + page_size], total
 
 
+def get_notification_stats(db: Session) -> dict[str, int]:
+    _, total = list_notification_events(db, page=1, page_size=1)
+    _, unread = list_notification_events(db, acknowledged=False, page=1, page_size=1)
+    return {
+        "total": total,
+        "unread": unread,
+    }
+
+
 def acknowledge_notification(db: Session, task_id: int, actor: str, note: str | None = None) -> dict | None:
     task = db.get(Task, task_id)
     if not task or task.task_type != "notification":

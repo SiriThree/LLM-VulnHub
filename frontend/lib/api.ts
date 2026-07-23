@@ -315,6 +315,11 @@ export type NotificationListResponse = {
   page_size: number;
 };
 
+export type NotificationStats = {
+  total: number;
+  unread: number;
+};
+
 export type AgentExecution = {
   id: number;
   agent_name: string;

@@ -24,6 +24,7 @@ from app.services.intel_service import (
     list_review_actions,
     undo_intelligence_review,
 )
+from app.services.notification_service import get_notification_stats
 
 
 class WorkflowUxTests(unittest.TestCase):
@@ -144,6 +145,19 @@ class WorkflowUxTests(unittest.TestCase):
         self.assertEqual(len(first_page), 2)
         self.assertEqual(len(second_page), 1)
         self.assertTrue(all(item.action == "approve" for item in first_page + second_page))
+
+    def test_notification_stats_count_all_visible_and_unread_notifications(self):
+        self.db.add_all(
+            [
+                Task(task_type="notification", status="success", output_data={"acknowledged": False}),
+                Task(task_type="notification", status="success", output_data={"acknowledged": True}),
+                Task(task_type="notification", status="success", output_data={"suppressed": True}),
+                Task(task_type="crawl", status="success", output_data={}),
+            ]
+        )
+        self.db.commit()
+
+        self.assertEqual(get_notification_stats(self.db), {"total": 2, "unread": 1})
 
     def test_undo_merge_restores_review_state_and_records_history(self):
         source = DataSource(name="Source", source_type="rss", url="https://example.com/feed.xml")
