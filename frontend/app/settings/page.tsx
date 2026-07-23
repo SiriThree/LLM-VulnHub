@@ -7,7 +7,7 @@ export default function SettingsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold">设置</h1>
-        <p className="text-sm text-slate-500">统一查看模型接入、运行环境和演示权限配置。</p>
+        <p className="text-sm text-slate-500">查看模型接入、运行环境和当前登录会话。</p>
       </div>
 
       <RoleSimulator />
@@ -24,8 +24,10 @@ export default function SettingsPage() {
             "DATABASE_URL=postgresql+psycopg://...",
             "REDIS_URL=redis://redis:6379/0",
             "NEXT_PUBLIC_API_BASE=http://localhost:8000/api/v1",
-            "DEFAULT_ACTOR=local-admin",
-            "DEFAULT_ROLE=admin",
+            "AUTH_ADMIN_PASSWORD=不少于 12 位",
+            "AUTH_ANALYST_PASSWORD=不少于 12 位",
+            "AUTH_VIEWER_PASSWORD=不少于 12 位",
+            "AUTH_COOKIE_SECURE=true（HTTPS）",
           ].map((item) => (
             <code className="rounded-md bg-muted p-3" key={item}>
               {item}
@@ -35,19 +37,19 @@ export default function SettingsPage() {
       </Card>
 
       <Card className="space-y-3">
-        <h2 className="font-semibold">推荐验证动作</h2>
+        <h2 className="font-semibold">功能自检</h2>
         <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-3">
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">模型抽取</div>
-            <div className="mt-1 leading-6">切到 AI 抽取页，输入真实漏洞描述，观察标题、类型、组件、攻击方式、修复建议是否随文本变化。</div>
+            <div className="mt-1 leading-6">进入辅助抽取页，输入一段漏洞描述，核对标题、类型、组件、攻击方式和修复建议。</div>
           </div>
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">权限控制</div>
-            <div className="mt-1 leading-6">用 viewer 角色尝试确认通知、编辑漏洞或新增数据源，验证后端是否返回 403。</div>
+            <div className="mt-1 leading-6">分别使用 viewer、analyst 和 admin 账户登录，确认服务端角色权限和记录可见范围。</div>
           </div>
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">运行观测</div>
-            <div className="mt-1 leading-6">进入 Operations 页，查看任务状态、模型调用次数和 token 消耗。</div>
+            <div className="mt-1 leading-6">进入运行运营页，查看任务状态、模型调用次数和 token 消耗。</div>
           </div>
         </div>
       </Card>

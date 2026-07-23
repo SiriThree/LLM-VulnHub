@@ -1,13 +1,20 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.core.input_security import MAX_URL_LENGTH, validate_source_location
 
 
 class DataSourceBase(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=160)
     source_type: str = Field(default="rss", pattern="^(rss|web|github|local_file)$")
-    url: str
+    url: str = Field(min_length=1, max_length=MAX_URL_LENGTH)
     enabled: bool = True
-    interval_minutes: int = Field(default=30, ge=1)
+    interval_minutes: int = Field(default=30, ge=1, le=10_080)
+
+    @model_validator(mode="after")
+    def validate_location(self):
+        self.url = validate_source_location(self.source_type, self.url)
+        return self
 
 
 class DataSourceCreate(DataSourceBase):
@@ -15,11 +22,11 @@ class DataSourceCreate(DataSourceBase):
 
 
 class DataSourceUpdate(BaseModel):
-    name: str | None = None
-    source_type: str | None = None
-    url: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    source_type: str | None = Field(default=None, pattern="^(rss|web|github|local_file)$")
+    url: str | None = Field(default=None, min_length=1, max_length=MAX_URL_LENGTH)
     enabled: bool | None = None
-    interval_minutes: int | None = Field(default=None, ge=1)
+    interval_minutes: int | None = Field(default=None, ge=1, le=10_080)
 
 
 class DataSourceRead(DataSourceBase):

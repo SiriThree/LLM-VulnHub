@@ -1,4 +1,3 @@
-import hashlib
 import math
 import re
 import warnings
@@ -13,7 +12,15 @@ except ImportError:  # pragma: no cover - used only when optional dependency is 
     TextEmbedding = None
 
 
-TOKEN_RE = re.compile(r"[A-Za-z0-9_\-\u4e00-\u9fff]+")
+@lru_cache(maxsize=1)
+def get_embedding_model() -> TextEmbedding:
+    settings = get_settings()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*now uses mean pooling instead of CLS embedding.*")
+        return TextEmbedding(
+            model_name=settings.embedding_model,
+            cache_dir=settings.embedding_cache_dir,
+        )
 
 
 def tokenize(text: str) -> list[str]:

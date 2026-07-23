@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api, CollectedDocument, CollectorOverview, DataSource, SourceHealth, TaskListResponse, TaskRecord } from "@/lib/api";
+import { useSessionDraft } from "@/lib/use-session-draft";
 
 type RunResponse = {
   task_id: number;
@@ -15,6 +16,13 @@ type RunResponse = {
   current_stage: string;
   queued_at: string;
   message: string;
+};
+
+const DEFAULT_SOURCE_FORM = {
+  name: "OpenAI Security News",
+  source_type: "web",
+  url: "https://openai.com/news/security/",
+  interval_minutes: 240,
 };
 
 const DOC_STATUS_LABELS: Record<string, string> = {
@@ -54,12 +62,10 @@ export default function CollectorsPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    name: "OpenAI Security News",
-    source_type: "web",
-    url: "https://openai.com/news/security/",
-    interval_minutes: 240,
-  });
+  const [form, setForm, { clearDraft: clearSourceDraft }] = useSessionDraft(
+    "llm-vulnhub:collector-source-draft:v1",
+    DEFAULT_SOURCE_FORM,
+  );
 
   async function load() {
     const [sourceList, overviewRes, taskList] = await Promise.all([
@@ -86,6 +92,7 @@ export default function CollectorsPage() {
         method: "POST",
         body: JSON.stringify({ ...form, enabled: true }),
       });
+      clearSourceDraft();
       setMessage("数据源已添加。");
       await load();
     } catch (error) {
@@ -170,7 +177,7 @@ export default function CollectorsPage() {
             <p className="mt-1 text-sm text-slate-500">支持 RSS、安全博客页面、官方公告页和 GitHub Advisory。</p>
           </div>
           <div className="grid gap-3 md:grid-cols-5">
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="数据源名称" />
+            <Input maxLength={160} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="数据源名称" />
             <select
               className="h-10 rounded-md border border-border bg-background px-3 text-sm"
               value={form.source_type}
@@ -182,6 +189,7 @@ export default function CollectorsPage() {
             </select>
             <Input
               className="md:col-span-2"
+              maxLength={800}
               value={form.url}
               onChange={(e) => setForm({ ...form, url: e.target.value })}
               placeholder="URL / 文件路径"

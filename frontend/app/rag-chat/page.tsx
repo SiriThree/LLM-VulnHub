@@ -11,7 +11,7 @@ import {
   Database,
   Search,
   Send,
-  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -86,14 +86,14 @@ export default function RagChatPage() {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 px-6 py-7 text-white shadow-soft">
+      <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 px-5 py-6 text-white shadow-soft sm:px-6 sm:py-7">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-slate-200">
-              <Sparkles size={14} /> 基于已入库漏洞生成可追溯回答
+              <ShieldCheck size={14} /> 回答范围限定于已入库漏洞
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight">RAG 智能问答</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-300">检索相关漏洞记录，结合上下文生成答案，并展示每条结论的参考来源。</p>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">漏洞知识检索</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-300">从漏洞库检索相关证据，整理回答并保留可核验的记录来源。</p>
           </div>
           <div className="flex gap-6 text-sm">
             <div>
@@ -102,7 +102,7 @@ export default function RagChatPage() {
             </div>
             <div>
               <div className="text-2xl font-semibold">{topSimilarity ? `${topSimilarity}%` : "-"}</div>
-              <div className="mt-1 text-xs text-slate-400">最高相似度</div>
+              <div className="mt-1 text-xs text-slate-400">最高相关度</div>
             </div>
           </div>
         </div>
@@ -148,7 +148,7 @@ export default function RagChatPage() {
                 </div>
                 <Button className="h-10 px-5" disabled={loading || question.trim().length < 2} type="submit">
                   {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Send size={16} />}
-                  {loading ? "正在检索并生成" : "开始问答"}
+                  {loading ? "正在检索与整理" : "检索并回答"}
                 </Button>
               </div>
             </form>
@@ -186,8 +186,8 @@ export default function RagChatPage() {
           <Card className="min-h-72 p-0">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div className="flex items-center gap-2">
-                <Sparkles size={17} className="text-primary" />
-                <h2 className="font-semibold">AI 回答</h2>
+                <ShieldCheck size={17} className="text-primary" />
+                <h2 className="font-semibold">分析结果</h2>
               </div>
               {answer ? (
                 <button
@@ -202,7 +202,7 @@ export default function RagChatPage() {
             </div>
             <div className="p-5">
               {loading ? (
-                <div className="space-y-3 py-3" aria-label="正在生成回答">
+                <div className="space-y-3 py-3" aria-label="正在整理回答">
                   <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
                   <div className="h-4 w-11/12 animate-pulse rounded bg-slate-100" />
                   <div className="h-4 w-4/5 animate-pulse rounded bg-slate-100" />
@@ -215,8 +215,8 @@ export default function RagChatPage() {
                   <div className="mb-3 rounded-full bg-slate-100 p-3 text-slate-400">
                     <BookOpen size={22} />
                   </div>
-                  <div className="text-sm font-medium text-slate-700">答案将在这里生成</div>
-                  <p className="mt-1 max-w-sm text-xs leading-5 text-slate-400">系统只会基于漏洞库中的召回内容回答，并在右侧列出参考记录。</p>
+                  <div className="text-sm font-medium text-slate-700">等待检索</div>
+                  <p className="mt-1 max-w-sm text-xs leading-5 text-slate-400">提交问题后，这里会显示整理后的结论；参考记录会列在右侧。</p>
                 </div>
               )}
             </div>

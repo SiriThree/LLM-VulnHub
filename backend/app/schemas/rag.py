@@ -1,15 +1,16 @@
 from pydantic import BaseModel, Field
 
+from app.core.input_security import MAX_RAG_QUESTION_CHARS
 from app.schemas.vulnerability import VulnerabilityRead
 
 
 class RagAskRequest(BaseModel):
-    question: str = Field(min_length=2)
+    question: str = Field(min_length=2, max_length=MAX_RAG_QUESTION_CHARS)
     top_k: int = Field(default=5, ge=1, le=10)
 
 
 class RagSearchRequest(BaseModel):
-    query: str = Field(min_length=2)
+    query: str = Field(min_length=2, max_length=MAX_RAG_QUESTION_CHARS)
     top_k: int = Field(default=5, ge=1, le=10)
 
 

@@ -9,6 +9,11 @@ def _column_names(engine: Engine, table_name: str) -> set[str]:
 
 def ensure_runtime_schema(engine: Engine) -> None:
     with engine.begin() as conn:
+        vulnerability_columns = _column_names(engine, "vulnerabilities") if inspect(engine).has_table("vulnerabilities") else set()
+        if "visibility" not in vulnerability_columns:
+            conn.execute(text("ALTER TABLE vulnerabilities ADD COLUMN visibility VARCHAR(20) DEFAULT 'public'"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_vulnerabilities_visibility ON vulnerabilities (visibility)"))
+
         analysis_job_columns = _column_names(engine, "analysis_jobs") if inspect(engine).has_table("analysis_jobs") else set()
         if "asset_impact_summary" not in analysis_job_columns:
             conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN asset_impact_summary TEXT DEFAULT ''"))

@@ -101,12 +101,16 @@ def _jsonable_snapshot(value):
 
 
 @router.get("/provider-status", response_model=ProviderStatusRead)
-def provider_status():
+def provider_status(identity: RequestIdentity = Depends(require_role("viewer"))):
     return LLMClient().provider_status()
 
 
 @router.post("/extract", response_model=ExtractResult)
-async def extract_api(payload: ExtractRequest, db: Session = Depends(get_db)):
+async def extract_api(
+    payload: ExtractRequest,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     state = await analyze_text(db, payload.raw_text, payload.source_url, save=False)
     extracted = dict(state["extracted_fields"])
     extracted["risk_reason"] = state.get("risk_reason", "")
@@ -119,8 +123,14 @@ async def extract_api(payload: ExtractRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/analyze", response_model=AnalyzeResult)
-async def analyze_api(payload: AnalyzeRequest, db: Session = Depends(get_db)):
-    state = await analyze_text(db, payload.raw_text, payload.source_url, save=payload.save)
+async def analyze_api(
+    payload: AnalyzeRequest,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
+    if payload.save:
+        raise HTTPException(400, "direct model publication is disabled; confirm the analysis after manual review")
+    state = await analyze_text(db, payload.raw_text, payload.source_url, save=False)
     vulnerability = None
     if state.get("vulnerability_id"):
         vulnerability = serialize_vulnerability(db.get(Vulnerability, state["vulnerability_id"]))
@@ -148,6 +158,8 @@ def confirm_analysis_api(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
+    if payload.vulnerability.visibility == "restricted" and identity.role != "admin":
+        raise HTTPException(403, "only admins can create restricted records")
     job = db.get(AnalysisJob, payload.analysis_job_id)
     if not job:
         raise HTTPException(404, "analysis job not found")
@@ -176,7 +188,11 @@ def confirm_analysis_api(
 
 
 @router.get("/jobs/{analysis_job_id}", response_model=AnalysisJobRead)
-def get_analysis_job(analysis_job_id: int, db: Session = Depends(get_db)):
+def get_analysis_job(
+    analysis_job_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     job = get_analysis_job_snapshot(db, analysis_job_id)
     if not job:
         raise HTTPException(404, "analysis job not found")
@@ -216,7 +232,10 @@ def evaluation_run_now(
 
 
 @router.post("/score", response_model=ScoreResult)
-def score_api(payload: ScoreRequest):
+def score_api(
+    payload: ScoreRequest,
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     score, severity, factors = calculate_risk(payload.vulnerability)
     return {
         "score": score,
@@ -228,7 +247,10 @@ def score_api(payload: ScoreRequest):
 
 
 @router.post("/report", response_model=ReportResult)
-def report_api(payload: ReportRequest):
+def report_api(
+    payload: ReportRequest,
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
     vulnerability: VulnerabilityCreate = payload.vulnerability
     report = (
         f"# {vulnerability.title}\n\n"

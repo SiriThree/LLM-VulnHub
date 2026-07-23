@@ -2,15 +2,30 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { GuestNotice } from "@/components/guest-notice";
 import { VulnerabilityForm } from "@/components/vulnerability-form";
-import { api, VulnerabilityDetail, VulnerabilityLineage } from "@/lib/api";
+import { api, AuthSession, VulnerabilityDetail, VulnerabilityLineage } from "@/lib/api";
+
+function isSafeExternalUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 export default async function DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [vulnerability, lineage] = await Promise.all([
+  const [vulnerability, lineage, session] = await Promise.all([
     api<VulnerabilityDetail>(`/vulnerabilities/${id}`),
     api<VulnerabilityLineage>(`/vulnerabilities/${id}/lineage`).catch(() => null),
+    api<AuthSession>("/auth/status").catch((): AuthSession => ({ authenticated: false })),
   ]);
+  const role = session.role ?? "guest";
+  const isGuest = role === "guest";
+  const canOperate = role === "analyst" || role === "admin";
 
   const timeline = [
     ...vulnerability.occurrences.map((occurrence) => ({
@@ -31,6 +46,8 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="space-y-5">
+      {isGuest ? <GuestNotice detail /> : null}
+
       <div className="flex items-start justify-between">
         <div>
           <Link className="text-sm text-primary" href="/vulnerabilities">
@@ -48,7 +65,10 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
         <Card><div className="text-xs text-slate-500">漏洞类型</div><div className="mt-1 font-medium">{vulnerability.vuln_type}</div></Card>
         <Card><div className="text-xs text-slate-500">影响组件</div><div className="mt-1 font-medium">{vulnerability.affected_component}</div></Card>
         <Card><div className="text-xs text-slate-500">状态</div><div className="mt-1 font-medium">{vulnerability.status}</div></Card>
-        <Card><div className="text-xs text-slate-500">AI 置信度</div><div className="mt-1 font-medium">{Math.round(vulnerability.confidence * 100)}%</div></Card>
+        <Card>
+          <div className="text-xs text-slate-500">AI 置信度</div>
+          <div className="mt-1 font-medium">{isGuest ? "登录后查看" : `${Math.round(vulnerability.confidence * 100)}%`}</div>
+        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -57,13 +77,22 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div><span className="text-slate-500">来源：</span>{vulnerability.source || "未填写"}</div>
             <div><span className="text-slate-500">标签：</span>{vulnerability.tags.join("、") || "暂无"}</div>
+            <div><span className="text-slate-500">可见范围：</span>{vulnerability.visibility}</div>
             <div className="col-span-2">
               <span className="text-slate-500">参考链接：</span>
-              {vulnerability.reference_url ? <a className="text-primary hover:underline" href={vulnerability.reference_url}>{vulnerability.reference_url}</a> : "暂无"}
+              {isSafeExternalUrl(vulnerability.reference_url) ? (
+                <a className="break-all text-primary hover:underline" href={vulnerability.reference_url} rel="noopener noreferrer" target="_blank">
+                  {vulnerability.reference_url}
+                </a>
+              ) : "暂无"}
             </div>
             <div className="col-span-2">
               <span className="text-slate-500">来源链接：</span>
-              {vulnerability.source_url ? <a className="text-primary hover:underline" href={vulnerability.source_url}>{vulnerability.source_url}</a> : "暂无"}
+              {isSafeExternalUrl(vulnerability.source_url) ? (
+                <a className="break-all text-primary hover:underline" href={vulnerability.source_url} rel="noopener noreferrer" target="_blank">
+                  {vulnerability.source_url}
+                </a>
+              ) : "暂无"}
             </div>
           </div>
 
@@ -76,7 +105,19 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
         </Card>
 
         <div className="space-y-4">
-          <Card>
+          {isGuest ? (
+            <Card className="border-amber-200 bg-amber-50">
+              <h2 className="font-semibold text-amber-950">受限内容</h2>
+              <p className="mt-2 text-sm leading-6 text-amber-800">
+                访客不会收到来源情报、分析记录、审核轨迹和攻击证据。登录账号后，系统会按账号角色重新判断可见范围。
+              </p>
+              <Link className="mt-4 inline-flex text-sm font-medium text-amber-950 hover:underline" href="/login">
+                前往账号登录
+              </Link>
+            </Card>
+          ) : (
+            <>
+            <Card>
             <h2 className="mb-3 font-semibold">漏洞时间线</h2>
             {timeline.length > 0 ? (
               <div className="space-y-3">
@@ -93,9 +134,9 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
             ) : (
               <div className="text-sm text-slate-500">当前没有可展示的时间线事件。</div>
             )}
-          </Card>
+            </Card>
 
-          <Card>
+            <Card>
             <h2 className="mb-3 font-semibold">来源情报</h2>
             {vulnerability.occurrences.length > 0 ? (
               <div className="space-y-3">
@@ -115,9 +156,9 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
             ) : (
               <div className="text-sm text-slate-500">当前没有来源情报记录。</div>
             )}
-          </Card>
+            </Card>
 
-          <Card>
+            <Card>
             <h2 className="mb-3 font-semibold">AI 分析记录</h2>
             {vulnerability.analyses.length > 0 ? (
               <div className="space-y-3">
@@ -136,7 +177,9 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
             ) : (
               <div className="text-sm text-slate-500">当前没有 AI 分析记录。</div>
             )}
-          </Card>
+            </Card>
+            </>
+          )}
         </div>
       </div>
 
@@ -186,10 +229,12 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
         </Card>
       ) : null}
 
-      <Card>
-        <h2 className="mb-3 font-semibold">编辑漏洞</h2>
-        <VulnerabilityForm mode="edit" vulnerabilityId={vulnerability.id} initial={vulnerability} />
-      </Card>
+      {canOperate ? (
+        <Card>
+          <h2 className="mb-3 font-semibold">编辑漏洞</h2>
+          <VulnerabilityForm mode="edit" vulnerabilityId={vulnerability.id} initial={vulnerability} />
+        </Card>
+      ) : null}
     </div>
   );
 }

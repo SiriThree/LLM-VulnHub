@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ArrowRight, Database, Radar, ShieldAlert, Sparkles } from "lucide-react";
+import { ArrowRight, Database, Radar, ShieldAlert } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { api, Vulnerability } from "@/lib/api";
+import { GuestNotice } from "@/components/guest-notice";
+import { api, AuthSession, Vulnerability } from "@/lib/api";
 import { formatSeverity } from "@/lib/presentation";
 
 type Stats = {
@@ -46,33 +47,50 @@ export default async function DashboardPage() {
     high_risk: [],
   };
 
-  const stats = await api<Stats>("/vulnerabilities/dashboard").catch(() => emptyStats);
+  const [stats, session] = await Promise.all([
+    api<Stats>("/vulnerabilities/dashboard").catch(() => emptyStats),
+    api<AuthSession>("/auth/status").catch((): AuthSession => ({ authenticated: false })),
+  ]);
+  const role = session.role ?? "guest";
+  const isGuest = role === "guest";
+  const canOperate = role === "analyst" || role === "admin";
   const criticalHigh = (stats.severity_distribution["严重"] ?? 0) + (stats.severity_distribution["高危"] ?? 0);
   const mediumLow = (stats.severity_distribution["中危"] ?? 0) + (stats.severity_distribution["低危"] ?? 0);
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-border bg-white p-6 shadow-soft">
+      {isGuest ? <GuestNotice /> : null}
+
+      <section className="rounded-xl border border-border bg-white p-5 shadow-soft sm:p-6">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">AI 漏洞情报运营总览</h1>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-primary">风险工作台</div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">漏洞情报运营总览</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">集中查看已入库漏洞、风险分布和近期处置重点。</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/collectors">
-              <Radar size={16} />
-              去看采集链路
-            </Link>
-            <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-medium text-slate-700" href="/ai-extract">
-              <Database size={16} />
-              录入 / 抽取漏洞
-            </Link>
+            {canOperate ? (
+              <>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/collectors">
+                  <Radar size={16} />
+                  查看采集链路
+                </Link>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-medium text-slate-700" href="/ai-extract">
+                  <Database size={16} />
+                  新增漏洞记录
+                </Link>
+              </>
+            ) : (
+              <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/vulnerabilities">
+                <Database size={16} />
+                浏览公开漏洞
+              </Link>
+            )}
           </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <div className="text-sm text-slate-500">漏洞总数</div>
           <div className="mt-3 text-3xl font-semibold">{stats.total}</div>
@@ -135,7 +153,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <div className="space-y-3">
-            {stats.recent.map((vulnerability) => (
+            {stats.recent.length ? stats.recent.map((vulnerability) => (
               <Link
                 className="flex items-center justify-between rounded-md border border-border p-3 text-sm transition hover:bg-slate-50"
                 href={`/vulnerabilities/${vulnerability.id}`}
@@ -147,7 +165,7 @@ export default async function DashboardPage() {
                 </div>
                 <Badge>{vulnerability.severity}</Badge>
               </Link>
-            ))}
+            )) : <EmptyState>尚无已入库记录</EmptyState>}
           </div>
         </Card>
 
@@ -155,15 +173,17 @@ export default async function DashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="font-semibold">高优先级漏洞</h2>
-              <p className="mt-1 text-sm text-slate-500">按风险分值排序，突出最值得处理的条目。</p>
+              <p className="mt-1 text-sm text-slate-500">按风险分值排序，便于安排复核和处置顺序。</p>
             </div>
-            <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" href="/intel-pool">
-              去看情报池
-              <ArrowRight size={14} />
-            </Link>
+            {canOperate ? (
+              <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" href="/intel-pool">
+                查看情报池
+                <ArrowRight size={14} />
+              </Link>
+            ) : null}
           </div>
           <div className="space-y-3">
-            {stats.high_risk.map((vulnerability) => (
+            {stats.high_risk.length ? stats.high_risk.map((vulnerability) => (
               <Link
                 className="flex items-center justify-between rounded-md border border-border p-3 text-sm transition hover:bg-slate-50"
                 href={`/vulnerabilities/${vulnerability.id}`}
@@ -180,10 +200,14 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               </Link>
-            ))}
+            )) : <EmptyState>尚无高优先级记录</EmptyState>}
           </div>
         </Card>
       </div>
     </div>
   );
+}
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-md border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">{children}</div>;
 }
