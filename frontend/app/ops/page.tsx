@@ -2,6 +2,8 @@ import { Activity, AlertTriangle, Clock3, Database, ListChecks, RadioTower, Serv
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import { api, OpsMetrics, SchedulerOverview } from "@/lib/api";
 
 function formatDate(value?: string | null) {
@@ -63,7 +65,17 @@ function Bars({ data }: { data: Record<string, number> }) {
   );
 }
 
-export default async function OpsPage() {
+export default async function OpsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const sp = await searchParams;
+  const beatPage = Math.max(1, Number(sp.beat_page ?? 1) || 1);
+  const beatPageSize = Math.max(1, Number(sp.beat_page_size ?? 5) || 5);
+  const sourcePage = Math.max(1, Number(sp.source_page ?? 1) || 1);
+  const sourcePageSize = Math.max(1, Number(sp.source_page_size ?? 5) || 5);
+  const paginationQuery = { ...sp };
   const empty: OpsMetrics = {
     queue_metrics: { queued: 0, running: 0, success: 0, failed: 0 },
     source_health: { total_sources: 0, enabled_sources: 0, disabled_sources: 0, recently_failed_notifications: 0 },
@@ -83,19 +95,20 @@ export default async function OpsPage() {
   const metrics = await api<OpsMetrics>("/ops/metrics").catch(() => empty);
   const scheduler = await api<SchedulerOverview>("/ops/scheduler").catch(() => ({ beat_jobs: [], sources: [] }));
   const failed = metrics.queue_metrics.failed + metrics.source_health.recently_failed_notifications;
+  const beatJobs = scheduler.beat_jobs.slice((beatPage - 1) * beatPageSize, beatPage * beatPageSize);
+  const scheduledSources = scheduler.sources.slice((sourcePage - 1) * sourcePageSize, sourcePage * sourcePageSize);
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">运行运营</h1>
-          <p className="mt-1 text-sm text-slate-500">集中查看采集调度、任务队列、数据源健康度和模型调用状态。</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+      <PageHero
+        title="运行运营"
+        description="集中查看采集调度、任务队列、数据源健康度和模型调用状态。"
+        eyebrow="运行态势"
+        actions={<div className="flex items-center gap-2 text-sm text-slate-300">
           <Clock3 size={16} />
           <span>调度源 {scheduler.sources.length} 个，Beat 任务 {scheduler.beat_jobs.length} 个</span>
-        </div>
-      </div>
+        </div>}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="队列中" value={metrics.queue_metrics.queued} hint="等待 worker 消费" icon={ListChecks} />
@@ -111,7 +124,7 @@ export default async function OpsPage() {
             <Badge>{scheduler.beat_jobs.length}</Badge>
           </div>
           <div className="space-y-3">
-            {scheduler.beat_jobs.map((item) => (
+            {beatJobs.map((item) => (
               <div key={item.name} className="rounded-md border border-border bg-slate-50 p-3">
                 <div className="truncate font-medium text-slate-950">{item.name}</div>
                 <div className="mt-1 truncate text-xs text-slate-500">{item.task}</div>
@@ -122,6 +135,15 @@ export default async function OpsPage() {
             ))}
             {scheduler.beat_jobs.length === 0 ? <div className="text-sm text-slate-500">暂无 Celery Beat 任务。</div> : null}
           </div>
+          <Pagination
+            total={scheduler.beat_jobs.length}
+            page={beatPage}
+            pageSize={beatPageSize}
+            basePath="/ops"
+            query={paginationQuery}
+            pageParam="beat_page"
+            pageSizeParam="beat_page_size"
+          />
         </Card>
 
         <Card>
@@ -205,7 +227,7 @@ export default async function OpsPage() {
               </tr>
             </thead>
             <tbody>
-              {scheduler.sources.map((item) => (
+              {scheduledSources.map((item) => (
                 <tr key={item.source_id} className="border-b border-border last:border-0 hover:bg-slate-50">
                   <td className="p-3">
                     <div className="truncate font-medium text-slate-950">{item.name}</div>
@@ -225,6 +247,16 @@ export default async function OpsPage() {
           </table>
         </div>
         {scheduler.sources.length === 0 ? <div className="p-4 text-sm text-slate-500">暂无数据源。</div> : null}
+        <Pagination
+          className="mx-4 mb-3"
+          total={scheduler.sources.length}
+          page={sourcePage}
+          pageSize={sourcePageSize}
+          basePath="/ops"
+          query={paginationQuery}
+          pageParam="source_page"
+          pageSizeParam="source_page_size"
+        />
       </Card>
     </div>
   );

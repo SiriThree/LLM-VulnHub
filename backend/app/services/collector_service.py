@@ -9,7 +9,7 @@ from typing import Any
 
 import feedparser
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -32,6 +32,10 @@ from app.services.provenance_service import build_source_health
 from app.workflows.vuln_analysis_graph import analyze_text, get_analysis_job_snapshot
 
 settings = get_settings()
+
+
+class DuplicateSourceError(ValueError):
+    pass
 
 TASK_STAGE_ORDER = [
     "queued",
@@ -201,7 +205,16 @@ def _prefilter_candidate(source: DataSource, item: dict[str, str]) -> tuple[bool
     return True, "passed"
 
 
-def get_collector_overview(db: Session) -> dict[str, Any]:
+def get_collector_overview(
+    db: Session,
+    *,
+    pending_page: int = 1,
+    pending_page_size: int = 5,
+    recent_page: int = 1,
+    recent_page_size: int = 5,
+    runs_page: int = 1,
+    runs_page_size: int = 5,
+) -> dict[str, Any]:
     sources = db.scalars(select(DataSource).order_by(DataSource.created_at.desc())).all()
     docs = db.scalars(select(CollectedDocument).order_by(CollectedDocument.collected_at.desc())).all()
     tasks = db.scalars(select(Task).order_by(Task.created_at.desc())).all()
@@ -233,8 +246,8 @@ def get_collector_overview(db: Session) -> dict[str, Any]:
 
     recent_runs: list[dict[str, Any]] = []
     crawl_tasks = [task for task in tasks if task.task_type == "crawl"]
-    for task in crawl_tasks[:12]:
-        for run in list((task.output_data or {}).get("source_runs", []))[:4]:
+    for task in crawl_tasks:
+        for run in list((task.output_data or {}).get("source_runs", [])):
             recent_runs.append(
                 {
                     "task_id": task.id,
@@ -260,14 +273,22 @@ def get_collector_overview(db: Session) -> dict[str, Any]:
                     "error": run.get("error"),
                 }
             )
-    recent_runs = recent_runs[:12]
+    recent_runs_total = len(recent_runs)
+    runs_start = (runs_page - 1) * runs_page_size
+    recent_runs = recent_runs[runs_start:runs_start + runs_page_size]
 
-    pending_documents = [
+    all_pending_documents = [
         doc
         for doc in docs
         if doc.status in {"queued_analysis", "pending_review"}
-    ][:10]
-    recent_documents = docs[:10]
+    ]
+    pending_documents_total = len(all_pending_documents)
+    pending_start = (pending_page - 1) * pending_page_size
+    pending_documents = all_pending_documents[pending_start:pending_start + pending_page_size]
+
+    recent_documents_total = len(docs)
+    recent_start = (recent_page - 1) * recent_page_size
+    recent_documents = docs[recent_start:recent_start + recent_page_size]
     source_health = [build_source_health(source, docs, tasks) for source in sources]
     source_health.sort(key=lambda item: (item["trust_score"], item["documents_total"], item["source_id"]), reverse=True)
 
@@ -277,8 +298,17 @@ def get_collector_overview(db: Session) -> dict[str, Any]:
         "queue_metrics": queue_metrics,
         "source_health": source_health,
         "recent_runs": recent_runs,
+        "recent_runs_total": recent_runs_total,
+        "recent_runs_page": runs_page,
+        "recent_runs_page_size": runs_page_size,
         "pending_documents": pending_documents,
+        "pending_documents_total": pending_documents_total,
+        "pending_documents_page": pending_page,
+        "pending_documents_page_size": pending_page_size,
         "recent_documents": recent_documents,
+        "recent_documents_total": recent_documents_total,
+        "recent_documents_page": recent_page,
+        "recent_documents_page_size": recent_page_size,
     }
 
 
@@ -289,6 +319,14 @@ def utcnow() -> datetime:
 def create_source(db: Session, payload: DataSourceCreate) -> DataSource:
     data = payload.model_dump()
     data["url"] = validate_source_location(data["source_type"], data["url"])
+    duplicate = db.scalar(
+        select(DataSource).where(
+            DataSource.source_type == data["source_type"],
+            func.lower(DataSource.url) == data["url"].lower(),
+        )
+    )
+    if duplicate:
+        raise DuplicateSourceError(f"Source already exists as #{duplicate.id}: {duplicate.name}")
     source = DataSource(**data)
     db.add(source)
     db.commit()
@@ -304,6 +342,15 @@ def update_source(db: Session, source_id: int, payload: DataSourceUpdate) -> Dat
     source_type = data.get("source_type", source.source_type)
     source_url = data.get("url", source.url)
     data["url"] = validate_source_location(source_type, source_url)
+    duplicate = db.scalar(
+        select(DataSource).where(
+            DataSource.id != source_id,
+            DataSource.source_type == source_type,
+            func.lower(DataSource.url) == data["url"].lower(),
+        )
+    )
+    if duplicate:
+        raise DuplicateSourceError(f"Source already exists as #{duplicate.id}: {duplicate.name}")
     for key, value in data.items():
         setattr(source, key, value)
     db.commit()

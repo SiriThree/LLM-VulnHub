@@ -40,13 +40,12 @@ def list_notification_events(
     event_type: str | None = None,
     status: str | None = None,
     acknowledged: bool | None = None,
-    limit: int = 100,
-) -> list[dict]:
+    page: int = 1,
+    page_size: int = 10,
+) -> tuple[list[dict], int]:
     stmt = select(Task).where(Task.task_type == "notification").order_by(Task.created_at.desc(), Task.id.desc())
     if status:
         stmt = stmt.where(Task.status == status)
-    stmt = stmt.limit(limit)
-
     items: list[dict] = []
     for task in db.scalars(stmt).all():
         if (task.output_data or {}).get("suppressed"):
@@ -59,7 +58,18 @@ def list_notification_events(
         if acknowledged is not None and current_acknowledged != acknowledged:
             continue
         items.append(item)
-    return items
+    total = len(items)
+    start = (page - 1) * page_size
+    return items[start:start + page_size], total
+
+
+def get_notification_stats(db: Session) -> dict[str, int]:
+    _, total = list_notification_events(db, page=1, page_size=1)
+    _, unread = list_notification_events(db, acknowledged=False, page=1, page_size=1)
+    return {
+        "total": total,
+        "unread": unread,
+    }
 
 
 def acknowledge_notification(db: Session, task_id: int, actor: str, note: str | None = None) -> dict | None:

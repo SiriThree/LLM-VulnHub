@@ -23,15 +23,19 @@ from app.services.intel_service import (
     approve_merge_candidate,
     batch_approve_intelligence_items,
     batch_reject_intelligence_items,
+    batch_undo_intelligence_reviews,
+    count_review_actions,
     export_review_actions_csv,
     get_intelligence_item,
     get_intelligence_lineage,
     get_intelligence_stats,
     get_review_stats,
     list_intelligence_items,
+    list_intelligence_review_actions,
     list_merge_candidates,
     list_review_actions,
     reject_intelligence_item,
+    undo_intelligence_review,
 )
 
 router = APIRouter(prefix="/intel", tags=["intel"])
@@ -40,10 +44,13 @@ router = APIRouter(prefix="/intel", tags=["intel"])
 @router.get("/items", response_model=IntelligenceListResponse)
 def list_items(
     status: str | None = Query(default=None, max_length=40),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": list_intelligence_items(db, status=status)}
+    items, total = list_intelligence_items(db, status=status, page=page, page_size=page_size)
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 @router.get("/stats", response_model=IntelligenceStatsRead)
@@ -95,17 +102,32 @@ def list_item_actions(
     item = get_intelligence_item(db, intel_item_id)
     if not item:
         raise HTTPException(404, "intelligence item not found")
-    return {"items": list_review_actions(db, target_type="intelligence_item", target_id=intel_item_id)}
+    items = list_intelligence_review_actions(db, intel_item_id)
+    return {"items": items, "total": len(items), "page": 1, "page_size": max(1, len(items))}
 
 
 @router.get("/review-actions", response_model=ReviewActionListResponse)
 def list_all_review_actions(
     actor: str | None = Query(default=None, max_length=120),
-    limit: int = Query(default=50, ge=1, le=200),
+    action: str | None = Query(default=None, max_length=40),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": list_review_actions(db, actor=actor, limit=limit)}
+    total = count_review_actions(db, actor=actor, action=action)
+    return {
+        "items": list_review_actions(
+            db,
+            actor=actor,
+            action=action,
+            offset=(page - 1) * page_size,
+            limit=page_size,
+        ),
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/review-actions/export", response_class=PlainTextResponse)
@@ -141,7 +163,26 @@ def reject_item(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    item = reject_intelligence_item(db, intel_item_id, actor=identity.actor, notes=payload.notes)
+    try:
+        item = reject_intelligence_item(db, intel_item_id, actor=identity.actor, notes=payload.notes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not item:
+        raise HTTPException(404, "intelligence item not found")
+    return item
+
+
+@router.post("/items/{intel_item_id}/undo", response_model=IntelligenceItemRead)
+def undo_item_review(
+    intel_item_id: int,
+    payload: ReviewDecisionRequest,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
+    try:
+        item = undo_intelligence_review(db, intel_item_id, actor=identity.actor, notes=payload.notes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     if not item:
         raise HTTPException(404, "intelligence item not found")
     return item
@@ -153,7 +194,11 @@ def batch_approve_items(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": batch_approve_intelligence_items(db, payload.item_ids, actor=identity.actor, notes=payload.notes)}
+    try:
+        items = batch_approve_intelligence_items(db, payload.item_ids, actor=identity.actor, notes=payload.notes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"items": items}
 
 
 @router.post("/items/batch-reject", response_model=BatchReviewDecisionResponse)
@@ -162,7 +207,24 @@ def batch_reject_items(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": batch_reject_intelligence_items(db, payload.item_ids, actor=identity.actor, notes=payload.notes)}
+    try:
+        items = batch_reject_intelligence_items(db, payload.item_ids, actor=identity.actor, notes=payload.notes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"items": items}
+
+
+@router.post("/items/batch-undo", response_model=BatchReviewDecisionResponse)
+def batch_undo_items(
+    payload: BatchReviewDecisionRequest,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("analyst")),
+):
+    try:
+        items = batch_undo_intelligence_reviews(db, payload.item_ids, actor=identity.actor, notes=payload.notes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"items": items}
 
 
 @router.get("/merge-candidates", response_model=list[MergeCandidateRead])
@@ -186,7 +248,10 @@ def approve_merge(
     target = db.get(Vulnerability, candidate_record.candidate_vulnerability_id) if candidate_record else None
     if not candidate_record or not target or not can_access_visibility(identity.role, target.visibility):
         raise HTTPException(404, "merge candidate not found")
-    candidate = approve_merge_candidate(db, merge_candidate_id, actor=identity.actor, notes=payload.notes)
+    try:
+        candidate = approve_merge_candidate(db, merge_candidate_id, actor=identity.actor, notes=payload.notes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     if not candidate:
         raise HTTPException(404, "merge candidate not found")
     return candidate

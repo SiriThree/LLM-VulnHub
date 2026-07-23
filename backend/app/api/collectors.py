@@ -36,10 +36,24 @@ def run_api(
 
 @router.get("/overview", response_model=CollectorOverviewRead)
 def overview_api(
+    pending_page: int = Query(default=1, ge=1),
+    pending_page_size: int = Query(default=5, ge=5, le=10),
+    recent_page: int = Query(default=1, ge=1),
+    recent_page_size: int = Query(default=5, ge=5, le=10),
+    runs_page: int = Query(default=1, ge=1),
+    runs_page_size: int = Query(default=5, ge=5, le=10),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return get_collector_overview(db)
+    return get_collector_overview(
+        db,
+        pending_page=pending_page,
+        pending_page_size=pending_page_size,
+        recent_page=recent_page,
+        recent_page_size=recent_page_size,
+        runs_page=runs_page,
+        runs_page_size=runs_page_size,
+    )
 
 
 @router.get("/documents", response_model=list[CollectedDocumentRead])

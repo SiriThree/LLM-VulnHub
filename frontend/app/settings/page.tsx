@@ -1,14 +1,16 @@
 import { PromptEvalPanel } from "@/components/prompt-eval-panel";
 import { RoleSimulator } from "@/components/role-simulator";
 import { Card } from "@/components/ui/card";
+import { PageHero } from "@/components/page-hero";
 
 export default function SettingsPage() {
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold">设置</h1>
-        <p className="text-sm text-slate-500">查看模型接入、运行环境和当前登录会话。</p>
-      </div>
+      <PageHero
+        title="设置"
+        description="查看模型接入、运行环境和当前登录会话。"
+        eyebrow="系统配置"
+      />
 
       <RoleSimulator />
 

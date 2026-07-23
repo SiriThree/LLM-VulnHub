@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Check, GitMerge, RefreshCcw, ShieldCheck, X } from "lucide-react";
+import { Check, GitMerge, RefreshCcw, RotateCcw, ShieldCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import {
   api,
   IntelligenceItem,
@@ -41,9 +43,19 @@ const ACTION_LABELS: Record<string, string> = {
   approve: "通过发布",
   reject: "驳回",
   approve_merge: "合并发布",
+  undo_review: "撤销审核",
 };
 
-const PUBLISHABLE_STATUSES = new Set(["pending_review", "triaged", "approved"]);
+const ACTION_OPTIONS = [
+  { value: "", label: "全部审核动作" },
+  { value: "approve", label: "通过发布" },
+  { value: "reject", label: "驳回" },
+  { value: "approve_merge", label: "合并发布" },
+  { value: "undo_review", label: "撤销审核" },
+];
+
+const PUBLISHABLE_STATUSES = new Set(["pending_review", "triaged"]);
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 
 function FieldCard({ label, value }: { label: string; value: unknown }) {
   return (
@@ -74,18 +86,32 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   );
   const [actions, setActions] = useState<ReviewAction[]>([]);
   const [globalActions, setGlobalActions] = useState<ReviewAction[]>([]);
+  const [globalActionType, setGlobalActionType] = useState("");
+  const [globalActionPage, setGlobalActionPage] = useState(1);
+  const [globalActionPageSize, setGlobalActionPageSize] = useState(5);
+  const [globalActionTotal, setGlobalActionTotal] = useState(0);
   const [stats, setStats] = useState<IntelligenceStats | null>(null);
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [lineage, setLineage] = useState<IntelligenceLineage | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
 
   async function load(nextSelectedId?: number | null) {
-    const query = status ? `?status=${encodeURIComponent(status)}` : "";
-    const res = await api<IntelligenceListResponse>(`/intel/items${query}`).catch(() => ({ items: [] }));
+    const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (status) query.set("status", status);
+    const res = await api<IntelligenceListResponse>(`/intel/items?${query}`).catch(() => ({
+      items: [],
+      total: 0,
+      page,
+      page_size: pageSize,
+    }));
     setItems(res.items);
+    setTotal(res.total);
 
     const resolvedSelectedId =
-      nextSelectedId !== undefined
+      nextSelectedId !== undefined && nextSelectedId !== null && res.items.some((item) => item.id === nextSelectedId)
         ? nextSelectedId
         : selectedId && res.items.some((item) => item.id === selectedId)
           ? selectedId
@@ -95,7 +121,12 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   }
 
   async function loadActions(intelItemId: number) {
-    const res = await api<ReviewActionListResponse>(`/intel/items/${intelItemId}/actions`).catch(() => ({ items: [] }));
+    const res = await api<ReviewActionListResponse>(`/intel/items/${intelItemId}/actions`).catch(() => ({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 5,
+    }));
     setActions(res.items);
   }
 
@@ -105,8 +136,19 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   }
 
   async function loadGlobalActions() {
-    const res = await api<ReviewActionListResponse>("/intel/review-actions?limit=12").catch(() => ({ items: [] }));
+    const query = new URLSearchParams({
+      page: String(globalActionPage),
+      page_size: String(globalActionPageSize),
+    });
+    if (globalActionType) query.set("action", globalActionType);
+    const res = await api<ReviewActionListResponse>(`/intel/review-actions?${query}`).catch(() => ({
+      items: [],
+      total: 0,
+      page: globalActionPage,
+      page_size: globalActionPageSize,
+    }));
     setGlobalActions(res.items);
+    setGlobalActionTotal(res.total);
   }
 
   async function loadStats() {
@@ -123,8 +165,11 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
     load();
     loadStats();
     loadReviewStats();
+  }, [status, page, pageSize]);
+
+  useEffect(() => {
     loadGlobalActions();
-  }, [status]);
+  }, [globalActionType, globalActionPage, globalActionPageSize]);
 
   useEffect(() => {
     if (selectedId) {
@@ -138,6 +183,10 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
 
   const selected = useMemo(() => items.find((item) => item.id === selectedId) ?? null, [items, selectedId]);
   const canApproveSelected = selected ? PUBLISHABLE_STATUSES.has(selected.status) : false;
+  const canUndoSelected = selected ? !PUBLISHABLE_STATUSES.has(selected.status) : false;
+  const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
+  const canBatchReview = selectedItems.length > 0 && selectedItems.every((item) => PUBLISHABLE_STATUSES.has(item.status));
+  const canBatchUndo = selectedItems.length > 0 && selectedItems.every((item) => !PUBLISHABLE_STATUSES.has(item.status));
 
   useEffect(() => {
     if (!selected) {
@@ -195,9 +244,9 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
           ? `情报 #${selected.id} 已发布到漏洞库，并关联漏洞 #${updated.vulnerability_id}。`
           : `情报 #${selected.id} 已完成审核。`,
       );
-      await load(updated.id);
-      await loadActions(updated.id);
-      await loadLineage(updated.id);
+      setSelectedId(updated.id);
+      setPage(1);
+      setStatus("approved");
       await refreshSideData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "确认入库失败。");
@@ -207,7 +256,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   }
 
   async function reject() {
-    if (!selected) return;
+    if (!selected || !canApproveSelected) return;
     setSubmitting(true);
     setMessage("");
     try {
@@ -217,9 +266,9 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
       });
       clearNoteDrafts([selected.id]);
       setMessage(`情报 #${updated.id} 已驳回。`);
-      await load(updated.id);
-      await loadActions(updated.id);
-      await loadLineage(updated.id);
+      setSelectedId(updated.id);
+      setPage(1);
+      setStatus("rejected");
       await refreshSideData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "驳回失败。");
@@ -228,20 +277,58 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
     }
   }
 
-  async function runBatch(action: "approve" | "reject") {
+  async function undoReview() {
+    if (!selected || !canUndoSelected) return;
+    setSubmitting(true);
+    setMessage("");
+    try {
+      const updated = await api<IntelligenceItem>(`/intel/items/${selected.id}/undo`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+      });
+      clearNoteDrafts([selected.id]);
+      setMessage(`情报 #${updated.id} 已撤销原审核结果并恢复为待审核。`);
+      setSelectedId(updated.id);
+      setPage(1);
+      setStatus("reviewable");
+      await refreshSideData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "撤销审核失败。");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function runBatch(action: "approve" | "reject" | "undo") {
     if (selectedIds.length === 0) return;
     setSubmitting(true);
     setMessage("");
     try {
-      const endpoint = action === "approve" ? "/intel/items/batch-approve" : "/intel/items/batch-reject";
+      const endpoint =
+        action === "approve"
+          ? "/intel/items/batch-approve"
+          : action === "reject"
+            ? "/intel/items/batch-reject"
+            : "/intel/items/batch-undo";
       const res = await api<{ items: IntelligenceItem[] }>(endpoint, {
         method: "POST",
         body: JSON.stringify({ actor: "analyst", notes, item_ids: selectedIds }),
       });
       clearNoteDrafts(selectedIds);
-      setMessage(action === "approve" ? `已批量通过 ${res.items.length} 条情报。` : `已批量驳回 ${res.items.length} 条情报。`);
+      setMessage(
+        action === "approve"
+          ? `已批量通过 ${res.items.length} 条情报。`
+          : action === "reject"
+            ? `已批量驳回 ${res.items.length} 条情报。`
+            : `已批量撤销 ${res.items.length} 条情报，现可重新审核。`,
+      );
       setSelectedIds([]);
-      await load(selectedId);
+      if (action === "undo") {
+        setPage(1);
+        setStatus("reviewable");
+      } else {
+        await load();
+      }
       await refreshSideData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "批量处理失败。");
@@ -255,15 +342,15 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
     setSubmitting(true);
     setMessage("");
     try {
-      await api(`/intel/merge-candidates/${candidateId}/approve`, {
+      const updated = await api<{ candidate_vulnerability_id: number }>(`/intel/merge-candidates/${candidateId}/approve`, {
         method: "POST",
         body: JSON.stringify({ actor: "analyst", notes }),
       });
       clearNoteDrafts([selected.id]);
-      setMessage(`合并候选 #${candidateId} 已通过。`);
-      await load(selected.id);
-      await loadActions(selected.id);
-      await loadLineage(selected.id);
+      setMessage(`情报 #${selected.id} 已合并到漏洞 #${updated.candidate_vulnerability_id}。`);
+      setSelectedId(selected.id);
+      setPage(1);
+      setStatus("approved");
       await refreshSideData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "合并失败。");
@@ -274,18 +361,15 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">情报池</h1>
-          <p className="text-sm text-slate-500">
-            采集结果先进入情报池，经过相关性判断、字段抽取、相似记录比对和人工复核后，再发布到正式漏洞库。
-          </p>
-        </div>
-        <Button type="button" className="border border-border bg-white text-slate-700" onClick={() => load(selectedId)}>
+      <PageHero
+        title="情报池"
+        description="采集结果先进入情报池，经过相关性判断、字段抽取、相似记录比对和人工复核后，再发布到正式漏洞库。"
+        eyebrow="审核与发布工作流"
+        actions={<Button type="button" className="border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => load(selectedId)}>
           <RefreshCcw size={16} />
           刷新
-        </Button>
-      </div>
+        </Button>}
+      />
 
       {message ? <div className="rounded-md border border-border bg-white p-3 text-sm">{message}</div> : null}
 
@@ -302,11 +386,12 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
       ) : null}
 
       {reviewStats ? (
-        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-7">
           <Card><div className="text-sm text-slate-500">审核动作总数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.total_actions}</div></Card>
           <Card><div className="text-sm text-slate-500">通过发布</div><div className="mt-3 text-3xl font-semibold">{reviewStats.approvals}</div></Card>
           <Card><div className="text-sm text-slate-500">驳回次数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.rejections}</div></Card>
           <Card><div className="text-sm text-slate-500">合并次数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.merges}</div></Card>
+          <Card><div className="text-sm text-slate-500">撤销次数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.undos}</div></Card>
           <Card><div className="text-sm text-slate-500">24h 审核动作</div><div className="mt-3 text-3xl font-semibold">{reviewStats.last_24h_actions}</div></Card>
           <Card><div className="text-sm text-slate-500">参与审核人数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.unique_actors}</div></Card>
         </div>
@@ -319,24 +404,36 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
             <select
               className="h-10 rounded-md border border-border bg-white px-3 text-sm"
               value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => {
+                setPage(1);
+                setStatus(event.target.value);
+              }}
             >
               {STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            <div className="text-sm text-slate-500">当前 {items.length} 条</div>
+            <div className="text-sm text-slate-500">共 {total} 条</div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <span className="text-sm text-slate-500">已选择 {selectedIds.length} 条</span>
               <Button
                 type="button"
                 onClick={() => runBatch("approve")}
-                disabled={submitting || selectedIds.length === 0 || status === "ignored" || status === "rejected"}
+                disabled={submitting || !canBatchReview}
               >
                 批量确认入库
               </Button>
-              <Button type="button" className="bg-accent" onClick={() => runBatch("reject")} disabled={submitting || selectedIds.length === 0}>
+              <Button type="button" className="bg-accent" onClick={() => runBatch("reject")} disabled={submitting || !canBatchReview}>
                 批量驳回
+              </Button>
+              <Button
+                type="button"
+                className="border border-border bg-white text-slate-700"
+                onClick={() => runBatch("undo")}
+                disabled={submitting || !canBatchUndo}
+              >
+                <RotateCcw size={16} />
+                批量撤销
               </Button>
             </div>
           </div>
@@ -360,7 +457,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card className="p-0">
+        <Card className="flex h-full flex-col p-0">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="font-semibold">情报列表</div>
             <label className="flex items-center gap-2 text-xs text-slate-500">
@@ -368,7 +465,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               全选
             </label>
           </div>
-          <div>
+          <div className="flex-1" style={{ minHeight: `${pageSize * 72}px` }}>
             {items.length > 0 ? items.map((item) => (
               <div
                 key={item.id}
@@ -395,6 +492,18 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               </div>
             )}
           </div>
+          <Pagination
+            className="px-4 pb-3"
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setPage(1);
+              setPageSize(value);
+            }}
+          />
         </Card>
 
         <Card>
@@ -423,9 +532,18 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                     <Check size={16} />
                     确认入库
                   </Button>
-                  <Button type="button" onClick={reject} disabled={submitting} className="bg-accent">
+                  <Button type="button" onClick={reject} disabled={submitting || !canApproveSelected} className="bg-accent">
                     <X size={16} />
                     驳回
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={undoReview}
+                    disabled={submitting || !canUndoSelected}
+                    className="border border-border bg-white text-slate-700"
+                  >
+                    <RotateCcw size={16} />
+                    撤销
                   </Button>
                 </div>
               </div>
@@ -562,9 +680,13 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                               相似度 {candidate.merge_score.toFixed(2)} | 质量 {candidate.quality} | {candidate.review_hint}
                             </div>
                           </div>
-                          <Button type="button" onClick={() => approveMerge(candidate.id)} disabled={submitting}>
+                          <Button
+                            type="button"
+                            onClick={() => approveMerge(candidate.id)}
+                            disabled={submitting || !canApproveSelected || candidate.status !== "pending"}
+                          >
                             <GitMerge size={16} />
-                            合并
+                            {candidate.status === "approved" ? "已合并" : "合并"}
                           </Button>
                         </div>
                       </div>
@@ -595,10 +717,27 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         </Card>
       </div>
 
-      <Card>
-        <div className="mb-3 font-semibold">全局审核动态</div>
+      <Card className="flex flex-col">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">全局审核动态</div>
+            <div className="mt-1 text-sm text-slate-500">按审核动作分类查看历史记录。</div>
+          </div>
+          <select
+            className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            value={globalActionType}
+            onChange={(event) => {
+              setGlobalActionPage(1);
+              setGlobalActionType(event.target.value);
+            }}
+          >
+            {ACTION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
         {globalActions.length > 0 ? (
-          <div className="space-y-3">
+          <div className="flex-1 space-y-3" style={{ minHeight: `${globalActionPageSize * 104}px` }}>
             {globalActions.map((action) => (
               <div key={action.id} className="flex items-start justify-between gap-4 rounded-md border border-border bg-white p-3 text-sm">
                 <div>
@@ -613,6 +752,16 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         ) : (
           <div className="text-sm text-slate-500">当前还没有审核动态。</div>
         )}
+        <Pagination
+          total={globalActionTotal}
+          page={globalActionPage}
+          pageSize={globalActionPageSize}
+          onPageChange={setGlobalActionPage}
+          onPageSizeChange={(value) => {
+            setGlobalActionPage(1);
+            setGlobalActionPageSize(value);
+          }}
+        />
       </Card>
     </div>
   );

@@ -15,5 +15,18 @@ class TaskRead(BaseModel):
     updated_at: datetime
 
 
+class TaskStatsRead(BaseModel):
+    total: int
+    queued: int
+    running: int
+    success: int
+    failed: int
+    dead_letter: int
+
+
 class TaskListResponse(BaseModel):
     items: list[TaskRead]
+    total: int
+    page: int
+    page_size: int
+    stats: TaskStatsRead

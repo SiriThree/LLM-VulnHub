@@ -66,6 +66,13 @@ export type DataSource = {
   updated_at: string;
 };
 
+export type DataSourceListResponse = {
+  items: DataSource[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
 export type MergeCandidate = {
   id: number;
   intelligence_item_id: number;
@@ -112,6 +119,9 @@ export type IntelligenceItem = {
 
 export type IntelligenceListResponse = {
   items: IntelligenceItem[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 
 export type IntelligenceStats = {
@@ -140,6 +150,9 @@ export type ReviewAction = {
 
 export type ReviewActionListResponse = {
   items: ReviewAction[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 
 export type ReviewStats = {
@@ -147,6 +160,7 @@ export type ReviewStats = {
   approvals: number;
   rejections: number;
   merges: number;
+  undos: number;
   unique_actors: number;
   last_24h_actions: number;
   top_actors: Array<{ actor: string; count: number }>;
@@ -296,6 +310,14 @@ export type NotificationEvent = {
 
 export type NotificationListResponse = {
   items: NotificationEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type NotificationStats = {
+  total: number;
+  unread: number;
 };
 
 export type AgentExecution = {
@@ -446,8 +468,17 @@ export type CollectorOverview = {
   queue_metrics: Record<string, number>;
   source_health: SourceHealth[];
   recent_runs: CollectorRecentRun[];
+  recent_runs_total: number;
+  recent_runs_page: number;
+  recent_runs_page_size: number;
   pending_documents: CollectedDocument[];
+  pending_documents_total: number;
+  pending_documents_page: number;
+  pending_documents_page_size: number;
   recent_documents: CollectedDocument[];
+  recent_documents_total: number;
+  recent_documents_page: number;
+  recent_documents_page_size: number;
 };
 
 export type IntelligenceLineage = {
@@ -611,6 +642,17 @@ export type TaskRecord = {
 
 export type TaskListResponse = {
   items: TaskRecord[];
+  total: number;
+  page: number;
+  page_size: number;
+  stats: {
+    total: number;
+    queued: number;
+    running: number;
+    success: number;
+    failed: number;
+    dead_letter: number;
+  };
 };
 
 export type AuthSession = {
@@ -692,7 +734,15 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       }
     }
     const text = await res.text();
-    throw new Error(text || res.statusText);
+    try {
+      const payload = JSON.parse(text) as { detail?: string };
+      throw new Error(payload.detail || text || res.statusText);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error(text || res.statusText);
+      }
+      throw error;
+    }
   }
   return res.json();
 }

@@ -5,6 +5,7 @@ import { FlaskConical, Play, ScrollText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Pagination } from "@/components/pagination";
 import { api, EvalRun, PromptRegistryItem } from "@/lib/api";
 
 function pct(value: number) {
@@ -17,6 +18,10 @@ export function PromptEvalPanel() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("");
+  const [promptPage, setPromptPage] = useState(1);
+  const [promptPageSize, setPromptPageSize] = useState(5);
+  const [evalPage, setEvalPage] = useState(1);
+  const [evalPageSize, setEvalPageSize] = useState(5);
 
   async function load() {
     try {
@@ -43,6 +48,7 @@ export function PromptEvalPanel() {
     try {
       const latest = await api<EvalRun>("/ops/evals/run", { method: "POST" });
       setEvals((current) => [latest, ...current.filter((item) => item.file_name !== latest.file_name)]);
+      setEvalPage(1);
       setMessage(`已完成一次评测：${latest.file_name}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "触发评测失败。");
@@ -53,7 +59,7 @@ export function PromptEvalPanel() {
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <Card className="space-y-4">
+      <Card className="flex flex-col space-y-4">
         <div className="flex items-start gap-3">
           <div className="rounded-md bg-muted p-2 text-primary">
             <ScrollText size={18} />
@@ -65,7 +71,7 @@ export function PromptEvalPanel() {
         </div>
 
         <div className="space-y-3">
-          {prompts.map((item) => (
+          {prompts.slice((promptPage - 1) * promptPageSize, promptPage * promptPageSize).map((item) => (
             <div key={item.key} className="rounded-md border border-border bg-slate-50 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -89,9 +95,19 @@ export function PromptEvalPanel() {
           ))}
           {!loading && prompts.length === 0 ? <div className="text-sm text-slate-500">暂无 Prompt 统计。</div> : null}
         </div>
+        <Pagination
+          total={prompts.length}
+          page={promptPage}
+          pageSize={promptPageSize}
+          onPageChange={setPromptPage}
+          onPageSizeChange={(value) => {
+            setPromptPage(1);
+            setPromptPageSize(value);
+          }}
+        />
       </Card>
 
-      <Card className="space-y-4">
+      <Card className="flex flex-col space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="rounded-md bg-muted p-2 text-primary">
@@ -111,7 +127,7 @@ export function PromptEvalPanel() {
         {message ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-slate-600">{message}</div> : null}
 
         <div className="space-y-3">
-          {evals.map((item) => (
+          {evals.slice((evalPage - 1) * evalPageSize, evalPage * evalPageSize).map((item) => (
             <div key={item.file_name} className="rounded-md border border-border bg-slate-50 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -131,6 +147,16 @@ export function PromptEvalPanel() {
           ))}
           {!loading && evals.length === 0 ? <div className="text-sm text-slate-500">还没有评测结果文件。</div> : null}
         </div>
+        <Pagination
+          total={evals.length}
+          page={evalPage}
+          pageSize={evalPageSize}
+          onPageChange={setEvalPage}
+          onPageSizeChange={(value) => {
+            setEvalPage(1);
+            setEvalPageSize(value);
+          }}
+        />
       </Card>
     </div>
   );

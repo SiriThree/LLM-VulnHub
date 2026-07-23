@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { api, NotificationEvent, NotificationListResponse } from "@/lib/api";
+import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
+import { api, NotificationEvent, NotificationListResponse, NotificationStats } from "@/lib/api";
 
 const EVENT_LABELS: Record<string, string> = {
   high_risk_pending_review: "高风险待复核",
@@ -26,25 +28,39 @@ export default function NotificationsPage() {
   const [acknowledged, setAcknowledged] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<NotificationStats>({ total: 0, unread: 0 });
 
   async function load() {
     const query = new URLSearchParams();
     if (eventType) query.set("event_type", eventType);
     if (status) query.set("status", status);
     if (acknowledged) query.set("acknowledged", acknowledged);
-    const res = await api<NotificationListResponse>(`/notifications?${query}`).catch(() => ({ items: [] }));
+    query.set("page", String(page));
+    query.set("page_size", String(pageSize));
+    const [res, statsRes] = await Promise.all([
+      api<NotificationListResponse>(`/notifications?${query}`).catch(() => ({
+        items: [],
+        total: 0,
+        page,
+        page_size: pageSize,
+      })),
+      api<NotificationStats>("/notifications/stats").catch(() => ({ total: 0, unread: 0 })),
+    ]);
     setItems(res.items);
+    setTotal(res.total);
+    setStats(statsRes);
     setSelectedIds((current) => current.filter((id) => res.items.some((item) => item.id === id)));
   }
 
   useEffect(() => {
     load();
-  }, [eventType, status, acknowledged]);
+  }, [eventType, status, acknowledged, page, pageSize]);
 
   const counts = useMemo(
     () => ({
-      total: items.length,
-      unread: items.filter((item) => !item.acknowledged).length,
       highRisk: items.filter((item) => item.event_type === "high_risk_pending_review").length,
       sourceFailure: items.filter((item) => item.event_type === "source_failure").length,
     }),
@@ -89,32 +105,33 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold">通知中心</h1>
-        <p className="text-sm text-slate-500">集中查看高风险待复核事件、采集源异常和异步流水线产出的关键通知。</p>
-      </div>
+      <PageHero
+        title="通知中心"
+        description="集中查看高风险待复核事件、采集源异常和异步流水线产出的关键通知。"
+        eyebrow="事件提醒与确认"
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card><div className="text-sm text-slate-500">通知总数</div><div className="mt-3 text-4xl font-semibold">{counts.total}</div></Card>
-        <Card><div className="text-sm text-slate-500">未读通知</div><div className="mt-3 text-4xl font-semibold">{counts.unread}</div></Card>
-        <Card><div className="text-sm text-slate-500">高风险待复核</div><div className="mt-3 text-4xl font-semibold">{counts.highRisk}</div></Card>
-        <Card><div className="text-sm text-slate-500">源采集失败</div><div className="mt-3 text-4xl font-semibold">{counts.sourceFailure}</div></Card>
+        <Card><div className="text-sm text-slate-500">通知总数</div><div className="mt-3 text-4xl font-semibold">{stats.total}</div></Card>
+        <Card><div className="text-sm text-slate-500">未读通知总数</div><div className="mt-3 text-4xl font-semibold">{stats.unread}</div></Card>
+        <Card><div className="text-sm text-slate-500">当页高风险待复核</div><div className="mt-3 text-4xl font-semibold">{counts.highRisk}</div></Card>
+        <Card><div className="text-sm text-slate-500">当页源采集失败</div><div className="mt-3 text-4xl font-semibold">{counts.sourceFailure}</div></Card>
       </div>
 
       <div className="grid gap-3 rounded-lg border border-border bg-white p-4 md:grid-cols-5">
-        <select value={eventType} onChange={(event) => setEventType(event.target.value)} className="rounded-md border border-border px-3 text-sm">
+        <select value={eventType} onChange={(event) => { setPage(1); setEventType(event.target.value); }} className="rounded-md border border-border px-3 text-sm">
           <option value="">全部事件</option>
           <option value="high_risk_pending_review">高风险待复核</option>
           <option value="source_failure">源采集失败</option>
         </select>
-        <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-md border border-border px-3 text-sm">
+        <select value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }} className="rounded-md border border-border px-3 text-sm">
           <option value="">全部任务状态</option>
           <option value="queued">queued</option>
           <option value="running">running</option>
           <option value="success">success</option>
           <option value="failed">failed</option>
         </select>
-        <select value={acknowledged} onChange={(event) => setAcknowledged(event.target.value)} className="rounded-md border border-border px-3 text-sm">
+        <select value={acknowledged} onChange={(event) => { setPage(1); setAcknowledged(event.target.value); }} className="rounded-md border border-border px-3 text-sm">
           <option value="">全部阅读状态</option>
           <option value="false">未读</option>
           <option value="true">已读</option>
@@ -129,7 +146,7 @@ export default function NotificationsPage() {
 
       <div className="text-sm text-slate-500">当前已选择 {selectedIds.length} 条通知</div>
 
-      <div className="space-y-3">
+      <div className="space-y-3" style={{ minHeight: `${pageSize * 220}px` }}>
         {items.length > 0 ? (
           items.map((item) => {
             const severityStyle = SEVERITY_STYLES[item.severity] ?? "bg-slate-100 text-slate-700";
@@ -187,6 +204,17 @@ export default function NotificationsPage() {
           <Card><div className="text-sm text-slate-500">当前筛选条件下没有通知事件。</div></Card>
         )}
       </div>
+      <Pagination
+        className="rounded-lg border border-border bg-white px-4 pb-3 shadow-soft"
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => {
+          setPage(1);
+          setPageSize(value);
+        }}
+      />
     </div>
   );
 }
