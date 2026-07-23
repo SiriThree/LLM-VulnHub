@@ -16,6 +16,7 @@ import {
   Radar,
   Settings,
   ShieldCheck,
+  ShieldEllipsis,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ const groups = [
   {
     title: "系统",
     items: [
+      { href: "/security-model", label: "安全设计", icon: ShieldEllipsis },
       { href: "/settings", label: "设置", icon: Settings },
       { href: "http://localhost:8000/docs", label: "OpenAPI", icon: FileSearch },
     ],

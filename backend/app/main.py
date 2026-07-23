@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, collectors, intel, notifications, ops, rag, sources, tasks, vulnerabilities
+from app.api import ai, collectors, intel, notifications, ops, rag, security_model, sources, tasks, vulnerabilities
 from app.core.config import get_settings
 from app.db import models
 from app.db.runtime_schema import ensure_runtime_schema
@@ -23,6 +23,7 @@ def create_app() -> FastAPI:
     app.include_router(vulnerabilities.router, prefix=settings.api_v1_prefix)
     app.include_router(ai.router, prefix=settings.api_v1_prefix)
     app.include_router(rag.router, prefix=settings.api_v1_prefix)
+    app.include_router(security_model.router, prefix=settings.api_v1_prefix)
     app.include_router(sources.router, prefix=settings.api_v1_prefix)
     app.include_router(collectors.router, prefix=settings.api_v1_prefix)
     app.include_router(intel.router, prefix=settings.api_v1_prefix)
