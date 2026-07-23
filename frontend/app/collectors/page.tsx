@@ -2,12 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowRight, Play, Plus, RefreshCw, ShieldAlert } from "lucide-react";
+import { Activity, ArrowRight, Pencil, Play, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api, CollectedDocument, CollectorOverview, DataSource, SourceHealth, TaskListResponse, TaskRecord } from "@/lib/api";
+import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
+import {
+  api,
+  AuthSession,
+  CollectedDocument,
+  CollectorOverview,
+  DataSource,
+  DataSourceListResponse,
+  SourceHealth,
+  TaskListResponse,
+  TaskRecord,
+} from "@/lib/api";
 import { useSessionDraft } from "@/lib/use-session-draft";
 
 type RunResponse = {
@@ -17,6 +29,8 @@ type RunResponse = {
   queued_at: string;
   message: string;
 };
+
+type SourceEditForm = Pick<DataSource, "name" | "source_type" | "url" | "enabled" | "interval_minutes">;
 
 const DEFAULT_SOURCE_FORM = {
   name: "OpenAI Security News",
@@ -36,6 +50,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   rss: "RSS / Blog",
   web: "Web 页面",
   github: "GitHub Advisory",
+  local_file: "本地文件",
 };
 
 const SOURCE_STATUS_LABELS: Record<string, string> = {
@@ -62,26 +77,71 @@ export default function CollectorsPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [canManageSources, setCanManageSources] = useState(false);
+  const [sourcePage, setSourcePage] = useState(1);
+  const [sourcePageSize, setSourcePageSize] = useState(5);
+  const [sourceTotal, setSourceTotal] = useState(0);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [pendingPageSize, setPendingPageSize] = useState(5);
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentPageSize, setRecentPageSize] = useState(5);
+  const [runsPage, setRunsPage] = useState(1);
+  const [runsPageSize, setRunsPageSize] = useState(5);
+  const [activeTaskPage, setActiveTaskPage] = useState(1);
+  const [activeTaskPageSize, setActiveTaskPageSize] = useState(5);
+  const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<SourceEditForm | null>(null);
   const [form, setForm, { clearDraft: clearSourceDraft }] = useSessionDraft(
     "llm-vulnhub:collector-source-draft:v1",
     DEFAULT_SOURCE_FORM,
   );
 
   async function load() {
+    const overviewQuery = new URLSearchParams({
+      pending_page: String(pendingPage),
+      pending_page_size: String(pendingPageSize),
+      recent_page: String(recentPage),
+      recent_page_size: String(recentPageSize),
+      runs_page: String(runsPage),
+      runs_page_size: String(runsPageSize),
+    });
     const [sourceList, overviewRes, taskList] = await Promise.all([
-      api<DataSource[]>("/sources").catch(() => []),
-      api<CollectorOverview>("/collectors/overview").catch(() => null),
-      api<TaskListResponse>("/tasks").catch(() => ({ items: [] })),
+      api<DataSourceListResponse>(`/sources?page=${sourcePage}&page_size=${sourcePageSize}`).catch(() => ({
+        items: [],
+        total: 0,
+        page: sourcePage,
+        page_size: sourcePageSize,
+      })),
+      api<CollectorOverview>(`/collectors/overview?${overviewQuery}`).catch(() => null),
+      api<TaskListResponse>("/tasks?page_size=50").catch(() => ({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 50,
+        stats: { total: 0, queued: 0, running: 0, success: 0, failed: 0, dead_letter: 0 },
+      })),
     ]);
-    setSources(sourceList);
+    setSources(sourceList.items);
+    setSourceTotal(sourceList.total);
     setOverview(overviewRes);
-    setTasks(taskList.items.filter((task) => task.task_type === "crawl").slice(0, 8));
+    if (overviewRes) {
+      setPendingPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.pending_documents_total / pendingPageSize))));
+      setRecentPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.recent_documents_total / recentPageSize))));
+      setRunsPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.recent_runs_total / runsPageSize))));
+    }
+    setTasks(taskList.items.filter((task) => task.task_type === "crawl"));
   }
 
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 5000);
     return () => window.clearInterval(timer);
+  }, [sourcePage, sourcePageSize, pendingPage, pendingPageSize, recentPage, recentPageSize, runsPage, runsPageSize]);
+
+  useEffect(() => {
+    api<AuthSession>("/auth/status")
+      .then((session) => setCanManageSources(session.role === "admin"))
+      .catch(() => setCanManageSources(false));
   }, []);
 
   async function createSource() {
@@ -94,9 +154,72 @@ export default function CollectorsPage() {
       });
       clearSourceDraft();
       setMessage("数据源已添加。");
-      await load();
+      if (sourcePage !== 1) {
+        setSourcePage(1);
+      } else {
+        await load();
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "添加数据源失败。");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function deleteSource(source: DataSource) {
+    if (!canManageSources || !window.confirm(`确认删除数据源“${source.name}”？历史采集文档会保留。`)) return;
+    setSubmitting(true);
+    setMessage("");
+    try {
+      await api(`/sources/${source.id}`, { method: "DELETE" });
+      if (editingSourceId === source.id) {
+        setEditingSourceId(null);
+        setEditForm(null);
+      }
+      setMessage(`数据源“${source.name}”已删除，历史采集记录仍保留。`);
+      if (sources.length === 1 && sourcePage > 1) {
+        setSourcePage((current) => current - 1);
+      } else {
+        await load();
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除数据源失败。");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEditingSource(source: DataSource) {
+    setMessage("");
+    setEditingSourceId(source.id);
+    setEditForm({
+      name: source.name,
+      source_type: source.source_type,
+      url: source.url,
+      enabled: source.enabled,
+      interval_minutes: source.interval_minutes,
+    });
+  }
+
+  function cancelEditingSource() {
+    setEditingSourceId(null);
+    setEditForm(null);
+  }
+
+  async function saveSource() {
+    if (!canManageSources || editingSourceId === null || !editForm) return;
+    setSubmitting(true);
+    setMessage("");
+    try {
+      const updated = await api<DataSource>(`/sources/${editingSourceId}`, {
+        method: "PUT",
+        body: JSON.stringify(editForm),
+      });
+      setMessage(`采集源“${updated.name}”已更新。`);
+      cancelEditingSource();
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "更新采集源失败。");
     } finally {
       setSubmitting(false);
     }
@@ -137,25 +260,27 @@ export default function CollectorsPage() {
     () => tasks.filter((task) => task.status === "queued" || task.status === "running"),
     [tasks],
   );
+  const activeTaskItems = activeTasks.slice(
+    (activeTaskPage - 1) * activeTaskPageSize,
+    activeTaskPage * activeTaskPageSize,
+  );
 
   const pendingDocs = overview?.pending_documents ?? [];
   const recentDocs = overview?.recent_documents ?? [];
+  const recentRuns = overview?.recent_runs ?? [];
   const sourceHealth = overview?.source_health ?? [];
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">动态采集控制台</h1>
-          <p className="text-sm text-slate-500">
-            这里展示真实采集链路的运行状态，以及每条情报从数据源到复核入库的可信度信号。
-          </p>
-        </div>
-        <Button type="button" className="border border-border bg-white text-slate-700" onClick={load}>
+      <PageHero
+        title="动态采集控制台"
+        description="展示采集链路运行状态，以及每条情报从数据源到复核入库的可信度信号。"
+        eyebrow="外部情报接入"
+        actions={<Button type="button" className="border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={load}>
           <RefreshCw size={16} />
           刷新
-        </Button>
-      </div>
+        </Button>}
+      />
 
       {message ? <div className="rounded-md border border-border bg-white p-3 text-sm">{message}</div> : null}
 
@@ -186,6 +311,7 @@ export default function CollectorsPage() {
               <option value="rss">rss</option>
               <option value="web">web</option>
               <option value="github">github</option>
+              <option value="local_file">local_file</option>
             </select>
             <Input
               className="md:col-span-2"
@@ -194,14 +320,14 @@ export default function CollectorsPage() {
               onChange={(e) => setForm({ ...form, url: e.target.value })}
               placeholder="URL / 文件路径"
             />
-            <Button onClick={createSource} disabled={submitting}>
+            <Button onClick={createSource} disabled={submitting || !canManageSources}>
               <Plus size={16} />
               添加
             </Button>
           </div>
         </Card>
 
-        <Card className="space-y-4">
+        <Card className="flex h-full flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">实时流水线状态</h2>
@@ -212,7 +338,7 @@ export default function CollectorsPage() {
 
           {activeTasks.length > 0 ? (
             <div className="space-y-3">
-              {activeTasks.map((task) => (
+              {activeTaskItems.map((task) => (
                 <div key={task.id} className="rounded-md border border-border bg-slate-50 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="font-medium">任务 #{task.id}</div>
@@ -228,76 +354,216 @@ export default function CollectorsPage() {
           ) : (
             <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有运行中的采集任务。</div>
           )}
+          <Pagination
+            total={activeTasks.length}
+            page={activeTaskPage}
+            pageSize={activeTaskPageSize}
+            onPageChange={setActiveTaskPage}
+            onPageSizeChange={(value) => {
+              setActiveTaskPage(1);
+              setActiveTaskPageSize(value);
+            }}
+          />
         </Card>
       </div>
 
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
+      <Card className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-semibold">来源可信度与产出质量</h2>
-            <p className="mt-1 text-sm text-slate-500">不是只看“有没有跑”，而是看这个源是否稳定、是否持续产出 AI 相关有效情报。</p>
+            <h2 className="font-semibold">采集源</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              共 {sourceTotal} 个来源，集中查看来源配置、运行状态、可信度与产出质量。
+            </p>
           </div>
-          <Button onClick={() => run()} disabled={submitting}>
-            <Play size={16} />
-            采集全部启用源
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => run()} disabled={submitting}>
+              <Play size={16} />
+              采集全部启用源
+            </Button>
+          </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sourceHealth.map((source) => (
-            <div key={source.source_id} className="rounded-md border border-border p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{source.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {SOURCE_TYPE_LABELS[source.source_type] ?? source.source_type} | {SOURCE_STATUS_LABELS[source.status] ?? source.status}
-                  </div>
-                </div>
-                <TrustBadge source={source} />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600">
-                <div>总文档 {source.documents_total}</div>
-                <div>AI 命中 {source.ai_related_documents}</div>
-                <div>待复核 {source.pending_review_documents}</div>
-                <div>已入库 {source.stored_documents}</div>
-                <div>去重命中 {source.duplicate_documents}</div>
-                <div>成功率 {Math.round(source.success_rate * 100)}%</div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
-                <div>请求成功 {Math.round(source.request_success_rate * 100)}%</div>
-                <div>初筛通过 {Math.round(source.prefilter_pass_rate * 100)}%</div>
-                <div>LLM 命中 {Math.round(source.llm_hit_rate * 100)}%</div>
-                <div>入库转化 {Math.round(source.library_conversion_rate * 100)}%</div>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-500">
-                <div>候选 {source.recent_discovered}</div>
-                <div>初筛 {source.recent_prefilter_passed}</div>
-                <div>入库 {source.recent_saved}</div>
-              </div>
-              <div className="mt-3 text-xs text-slate-400">
-                最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
-                {source.freshness_minutes != null ? ` | 距今 ${source.freshness_minutes} min` : ""}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {source.signals.map((signal) => (
-                  <span key={signal} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
-                    {signal}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-4">
-                <Button className="h-8" onClick={() => run(source.source_id)} disabled={submitting || !source.enabled}>
-                  <Play size={14} />
-                  立即采集
+        {editingSourceId !== null && editForm ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+            <div>
+              <h3 className="font-semibold text-slate-900">编辑采集源 #{editingSourceId}</h3>
+              <p className="mt-1 text-sm text-slate-500">修改后会在下次调度或手动采集时生效。</p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <label className="space-y-1 xl:col-span-2">
+                <span className="text-xs text-slate-500">来源名称</span>
+                <Input
+                  maxLength={160}
+                  value={editForm.name}
+                  onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">来源类型</span>
+                <select
+                  className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
+                  value={editForm.source_type}
+                  onChange={(event) => setEditForm({ ...editForm, source_type: event.target.value })}
+                >
+                  <option value="rss">rss</option>
+                  <option value="web">web</option>
+                  <option value="github">github</option>
+                  <option value="local_file">local_file</option>
+                </select>
+              </label>
+              <label className="space-y-1 xl:col-span-2">
+                <span className="text-xs text-slate-500">URL / 文件路径</span>
+                <Input
+                  maxLength={800}
+                  value={editForm.url}
+                  onChange={(event) => setEditForm({ ...editForm, url: event.target.value })}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">采集周期（分钟）</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10080}
+                  value={editForm.interval_minutes}
+                  onChange={(event) => setEditForm({ ...editForm, interval_minutes: Number(event.target.value) })}
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editForm.enabled}
+                  onChange={(event) => setEditForm({ ...editForm, enabled: event.target.checked })}
+                />
+                启用该采集源
+              </label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="border border-border bg-white text-slate-700"
+                  disabled={submitting}
+                  onClick={cancelEditingSource}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  disabled={submitting || !editForm.name.trim() || !editForm.url.trim() || editForm.interval_minutes < 1}
+                  onClick={saveSource}
+                >
+                  保存修改
                 </Button>
               </div>
             </div>
-          ))}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {sources.map((source) => {
+            const health = sourceHealth.find((item) => item.source_id === source.id);
+            return (
+              <div key={source.id} className="flex h-full flex-col rounded-md border border-border p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium">{source.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {SOURCE_TYPE_LABELS[source.source_type] ?? source.source_type}
+                      {" · "}
+                      {health ? SOURCE_STATUS_LABELS[health.status] ?? health.status : source.enabled ? "已启用" : "已停用"}
+                    </div>
+                  </div>
+                  {health ? (
+                    <TrustBadge source={health} />
+                  ) : (
+                    <span className={`shrink-0 rounded px-2 py-1 text-xs ${source.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                      {source.enabled ? "已启用" : "已停用"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 break-all rounded-md bg-slate-50 p-3 text-xs leading-5 text-slate-600">{source.url}</div>
+
+                {health ? (
+                  <>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600">
+                      <div>总文档 {health.documents_total}</div>
+                      <div>AI 命中 {health.ai_related_documents}</div>
+                      <div>待复核 {health.pending_review_documents}</div>
+                      <div>已入库 {health.stored_documents}</div>
+                      <div>去重命中 {health.duplicate_documents}</div>
+                      <div>成功率 {Math.round(health.success_rate * 100)}%</div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                      <div>请求成功 {Math.round(health.request_success_rate * 100)}%</div>
+                      <div>初筛通过 {Math.round(health.prefilter_pass_rate * 100)}%</div>
+                      <div>LLM 命中 {Math.round(health.llm_hit_rate * 100)}%</div>
+                      <div>入库转化 {Math.round(health.library_conversion_rate * 100)}%</div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {health.signals.map((signal) => (
+                        <span key={signal} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                          {signal}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-500">暂时没有该来源的运行质量数据。</div>
+                )}
+
+                <div className="mt-3 text-xs text-slate-400">
+                  周期 {source.interval_minutes} min · 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
+                  {health?.freshness_minutes != null ? ` · 距今 ${health.freshness_minutes} min` : ""}
+                </div>
+                <div className={`mt-auto grid gap-2 pt-4 ${canManageSources ? "grid-cols-3" : "grid-cols-1"}`}>
+                  <Button className="h-8 w-full gap-1 px-2 text-xs" onClick={() => run(source.id)} disabled={submitting || !source.enabled}>
+                    <Play size={14} />
+                    立即采集
+                  </Button>
+                  {canManageSources ? (
+                    <>
+                      <Button
+                        type="button"
+                        className="h-8 w-full gap-1 border border-border bg-white px-2 text-xs text-slate-700"
+                        disabled={submitting}
+                        onClick={() => startEditingSource(source)}
+                      >
+                        <Pencil size={14} />
+                        编辑
+                      </Button>
+                      <Button
+                        type="button"
+                        className="h-8 w-full gap-1 border border-rose-200 bg-white px-2 text-xs text-rose-700 hover:bg-rose-50"
+                        disabled={submitting}
+                        onClick={() => deleteSource(source)}
+                      >
+                        <Trash2 size={14} />
+                        删除来源
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
+        {sources.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有采集源。</div> : null}
+        <Pagination
+          total={sourceTotal}
+          page={sourcePage}
+          pageSize={sourcePageSize}
+          onPageChange={setSourcePage}
+          onPageSizeChange={(value) => {
+            setSourcePage(1);
+            setSourcePageSize(value);
+          }}
+        />
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <Card className="space-y-4">
+        <Card className="flex h-full flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">待处理队列</h2>
@@ -308,7 +574,7 @@ export default function CollectorsPage() {
             </Link>
           </div>
 
-          <div className="space-y-3">
+          <div className="flex-1 space-y-3">
             {pendingDocs.map((doc: CollectedDocument) => (
               <div key={doc.id} className="rounded-md border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -339,15 +605,29 @@ export default function CollectorsPage() {
               </div>
             ))}
             {pendingDocs.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有待处理文档。</div> : null}
+            {Array.from({ length: Math.max(0, pendingPageSize - pendingDocs.length) }).map((_, index) => (
+              <div aria-hidden="true" className="invisible min-h-[74px] rounded-md border p-3" key={`pending-placeholder-${index}`} />
+            ))}
           </div>
+          <Pagination
+            total={overview?.pending_documents_total ?? 0}
+            page={pendingPage}
+            pageSize={pendingPageSize}
+            pageSizeOptions={[5, 10]}
+            onPageChange={setPendingPage}
+            onPageSizeChange={(value) => {
+              setPendingPage(1);
+              setPendingPageSize(value);
+            }}
+          />
         </Card>
 
-        <Card className="space-y-4">
+        <Card className="flex h-full flex-col gap-4">
           <div>
             <h2 className="font-semibold">最近采集结果</h2>
             <p className="mt-1 text-sm text-slate-500">展示最新进入系统的候选文本，可快速跳转到分析或复核环节。</p>
           </div>
-          <div className="space-y-3">
+          <div className="flex-1 space-y-3">
             {recentDocs.map((doc: CollectedDocument) => (
               <div key={doc.id} className="rounded-md border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -361,18 +641,33 @@ export default function CollectorsPage() {
                 </div>
               </div>
             ))}
+            {recentDocs.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有采集结果。</div> : null}
+            {Array.from({ length: Math.max(0, recentPageSize - recentDocs.length) }).map((_, index) => (
+              <div aria-hidden="true" className="invisible min-h-[74px] rounded-md border p-3" key={`recent-placeholder-${index}`} />
+            ))}
           </div>
+          <Pagination
+            total={overview?.recent_documents_total ?? 0}
+            page={recentPage}
+            pageSize={recentPageSize}
+            pageSizeOptions={[5, 10]}
+            onPageChange={setRecentPage}
+            onPageSizeChange={(value) => {
+              setRecentPage(1);
+              setRecentPageSize(value);
+            }}
+          />
         </Card>
       </div>
 
-      <Card className="space-y-4">
+      <Card className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Activity size={16} />
           <h2 className="font-semibold">最近运行轨迹</h2>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {(overview?.recent_runs ?? []).map((run) => (
-            <div key={`${run.task_id}-${run.source_id}-${run.source_name}`} className="rounded-md border border-border p-3">
+        <div className="grid flex-1 auto-rows-fr gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {recentRuns.map((run) => (
+            <div key={`${run.task_id}-${run.source_id}-${run.source_name}`} className="flex min-h-44 flex-col rounded-md border border-border p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-medium">{run.source_name}</div>
@@ -411,31 +706,24 @@ export default function CollectorsPage() {
               )}
             </div>
           ))}
-        </div>
-      </Card>
-
-      <Card className="space-y-4">
-        <div className="font-semibold">原始来源清单</div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sources.map((source) => (
-            <div key={source.id} className="rounded-md border border-border p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{source.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">{SOURCE_TYPE_LABELS[source.source_type] ?? source.source_type}</div>
-                </div>
-                <span className={`rounded px-2 py-1 text-xs ${source.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                  {source.enabled ? "enabled" : "disabled"}
-                </span>
-              </div>
-              <div className="mt-3 break-all text-sm text-slate-600">{source.url}</div>
-              <div className="mt-3 text-xs text-slate-400">
-                周期 {source.interval_minutes} min | 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
-              </div>
-            </div>
+          {recentRuns.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有运行轨迹。</div> : null}
+          {Array.from({ length: Math.max(0, runsPageSize - recentRuns.length) }).map((_, index) => (
+            <div aria-hidden="true" className="invisible min-h-44 rounded-md border p-3" key={`run-placeholder-${index}`} />
           ))}
         </div>
+        <Pagination
+          total={overview?.recent_runs_total ?? 0}
+          page={runsPage}
+          pageSize={runsPageSize}
+          pageSizeOptions={[5, 10]}
+          onPageChange={setRunsPage}
+          onPageSizeChange={(value) => {
+            setRunsPage(1);
+            setRunsPageSize(value);
+          }}
+        />
       </Card>
+
     </div>
   );
 }

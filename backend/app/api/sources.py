@@ -1,23 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import RequestIdentity, require_role
 from app.core.input_security import InputSecurityError
 from app.db.models import DataSource
 from app.db.session import get_db
-from app.schemas.collector import DataSourceCreate, DataSourceRead, DataSourceUpdate
-from app.services.collector_service import create_source, update_source
+from app.schemas.collector import DataSourceCreate, DataSourceListResponse, DataSourceRead, DataSourceUpdate
+from app.services.collector_service import DuplicateSourceError, create_source, update_source
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 
-@router.get("", response_model=list[DataSourceRead])
+@router.get("", response_model=DataSourceListResponse)
 def list_sources(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return db.scalars(select(DataSource).order_by(DataSource.created_at.desc())).all()
+    total = db.scalar(select(func.count()).select_from(DataSource)) or 0
+    items = db.scalars(
+        select(DataSource)
+        .order_by(DataSource.created_at.desc(), DataSource.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 @router.post("", response_model=DataSourceRead)
@@ -28,6 +37,8 @@ def create_source_api(
 ):
     try:
         return create_source(db, payload)
+    except DuplicateSourceError as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
     except InputSecurityError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
 
@@ -41,6 +52,8 @@ def update_source_api(
 ):
     try:
         source = update_source(db, source_id, payload)
+    except DuplicateSourceError as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
     except InputSecurityError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
     if not source:

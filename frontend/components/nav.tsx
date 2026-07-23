@@ -64,7 +64,7 @@ const groups = [
     items: [
       { href: "/security-model", label: "安全设计", icon: ShieldEllipsis, minRole: "viewer" as Role },
       { href: "/settings", label: "设置", icon: Settings, minRole: "viewer" as Role },
-      { href: "http://localhost:8000/docs", label: "OpenAPI", icon: FileSearch, minRole: "admin" as Role },
+      { href: "/docs", label: "OpenAPI", icon: FileSearch, minRole: "admin" as Role },
     ],
   },
 ];

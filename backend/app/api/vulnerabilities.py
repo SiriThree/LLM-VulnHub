@@ -35,7 +35,7 @@ def list_api(
     component: str | None = Query(default=None, max_length=200),
     status: str | None = Query(default=None, max_length=40),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("guest")),
 ):

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Archive, RefreshCw, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import { api, DeadLetterTask, TaskListResponse, TaskRecord } from "@/lib/api";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -59,14 +61,40 @@ export default function TasksPage() {
   const [deadLetters, setDeadLetters] = useState<DeadLetterTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [failedTasks, setFailedTasks] = useState<TaskRecord[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [taskStatus, setTaskStatus] = useState("");
+  const [failedPage, setFailedPage] = useState(1);
+  const [failedPageSize, setFailedPageSize] = useState(5);
+  const [deadLetterPage, setDeadLetterPage] = useState(1);
+  const [deadLetterPageSize, setDeadLetterPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<TaskListResponse["stats"]>({
+    total: 0,
+    queued: 0,
+    running: 0,
+    success: 0,
+    failed: 0,
+    dead_letter: 0,
+  });
 
   async function load() {
     try {
-      const [taskRes, deadLetterRes] = await Promise.all([
-        api<TaskListResponse>("/tasks"),
+      const taskQuery = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      if (taskStatus) taskQuery.set("status", taskStatus);
+      const [taskRes, failedRes, deadLetterRes] = await Promise.all([
+        api<TaskListResponse>(`/tasks?${taskQuery}`),
+        api<TaskListResponse>("/tasks?status=failed&page=1&page_size=100"),
         api<DeadLetterTask[]>("/ops/dead-letter"),
       ]);
       setTasks(taskRes.items);
+      setTotal(taskRes.total);
+      setStats(taskRes.stats);
+      setFailedTasks(failedRes.items.filter((task) => !task.output_data.dead_letter));
       setDeadLetters(deadLetterRes);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "加载任务失败。");
@@ -79,7 +107,7 @@ export default function TasksPage() {
     load();
     const timer = window.setInterval(load, 4000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [page, pageSize, taskStatus]);
 
   async function retryTask(taskId: number) {
     setMessage("");
@@ -103,37 +131,100 @@ export default function TasksPage() {
     }
   }
 
-  const activeCount = useMemo(() => tasks.filter((task) => task.status === "queued" || task.status === "running").length, [tasks]);
+  async function markDeadLetter(taskId: number) {
+    setMessage("");
+    try {
+      await api(`/ops/dead-letter/${taskId}/mark`, { method: "POST" });
+      setMessage(`异常任务 #${taskId} 已转入死信队列。`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "转入死信队列失败。");
+    }
+  }
+
+  const activeCount = stats.queued + stats.running;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">任务中心</h1>
-          <p className="text-sm text-slate-500">统一观察 ingestion、analysis、review、notification 四段异步流水线。</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-500">活跃任务 {activeCount}</span>
-          <Button type="button" onClick={load} disabled={loading}>
+      <PageHero
+        title="任务中心"
+        description="统一观察采集入池、分析、复核和通知四段异步流水线。"
+        eyebrow={`当前活跃任务 ${activeCount}`}
+        actions={<Button type="button" className="border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={load} disabled={loading}>
             <RefreshCw size={16} />
             刷新
-          </Button>
-        </div>
-      </div>
+          </Button>}
+      />
 
       {message ? <div className="rounded-md border border-border bg-white p-3 text-sm">{message}</div> : null}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        {([
+          ["任务总数", stats.total],
+          ["排队中", stats.queued],
+          ["运行中", stats.running],
+          ["已成功", stats.success],
+          ["执行失败", stats.failed],
+          ["死信任务", stats.dead_letter],
+        ] as Array<[string, number]>).map(([label, value]) => (
+          <Card key={label}>
+            <div className="text-sm text-slate-500">{label}</div>
+            <div className="mt-3 text-3xl font-semibold">{value}</div>
+          </Card>
+        ))}
+      </div>
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Dead Letter Queue</h2>
-            <p className="text-sm text-slate-500">达到最大重试次数的任务会停留在这里，等待人工排障与恢复。</p>
+            <h2 className="text-lg font-semibold">异常与死信处理</h2>
+            <p className="text-sm text-slate-500">失败任务可直接重试或转入死信队列；死信任务在排障后可重新入队。</p>
           </div>
-          <div className="text-sm text-slate-500">当前 {deadLetters.length} 条</div>
+          <div className="text-sm text-slate-500">异常 {failedTasks.length} · 死信 {deadLetters.length}</div>
         </div>
 
         <div className="space-y-3">
-          {deadLetters.map((item) => (
+          <div className="text-sm font-medium text-slate-700">失败任务</div>
+          {failedTasks
+            .slice((failedPage - 1) * failedPageSize, failedPage * failedPageSize)
+            .map((item) => (
+            <div key={`failed-${item.id}`} className="rounded-md border border-amber-200 bg-amber-50/50 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium">异常任务 #{item.id} · {item.task_type}</div>
+                  <div className="mt-1 text-sm text-slate-600">{item.error_message || item.output_data.last_message || "未记录异常原因。"}</div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    阶段 {item.output_data.current_stage || "-"} · 更新时间 {new Date(item.updated_at).toLocaleString()}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" onClick={() => retryTask(item.id)}>
+                    <RotateCcw size={16} />
+                    重试
+                  </Button>
+                  <Button type="button" className="bg-slate-700" onClick={() => markDeadLetter(item.id)}>
+                    <Archive size={16} />
+                    转为死信
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+          <Pagination
+            total={failedTasks.length}
+            page={failedPage}
+            pageSize={failedPageSize}
+            onPageChange={setFailedPage}
+            onPageSizeChange={(value) => {
+              setFailedPage(1);
+              setFailedPageSize(value);
+            }}
+          />
+
+          <div className="pt-2 text-sm font-medium text-slate-700">死信任务</div>
+          {deadLetters
+            .slice((deadLetterPage - 1) * deadLetterPageSize, deadLetterPage * deadLetterPageSize)
+            .map((item) => (
             <div key={item.id} className="rounded-md border border-border bg-slate-50 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -150,9 +241,55 @@ export default function TasksPage() {
               </div>
             </div>
           ))}
-          {deadLetters.length === 0 ? <div className="text-sm text-slate-500">当前没有死信任务。</div> : null}
+          <Pagination
+            total={deadLetters.length}
+            page={deadLetterPage}
+            pageSize={deadLetterPageSize}
+            onPageChange={setDeadLetterPage}
+            onPageSizeChange={(value) => {
+              setDeadLetterPage(1);
+              setDeadLetterPageSize(value);
+            }}
+          />
+          {failedTasks.length === 0 && deadLetters.length === 0 ? <div className="text-sm text-slate-500">当前没有异常或死信任务。</div> : null}
         </div>
       </Card>
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">任务列表</div>
+            <div className="mt-1 text-sm text-slate-500">共 {total} 条任务记录</div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-500">
+            分类
+            <select
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm text-slate-700"
+              value={taskStatus}
+              onChange={(event) => {
+                setPage(1);
+                setTaskStatus(event.target.value);
+              }}
+            >
+              <option value="">全部任务</option>
+              <option value="success">成功任务</option>
+              <option value="failed">失败任务</option>
+            </select>
+          </label>
+        </div>
+      </Card>
+
+      <Pagination
+        className="rounded-lg border border-border bg-white px-4 pb-3 shadow-soft"
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => {
+          setPage(1);
+          setPageSize(value);
+        }}
+      />
 
       <div className="space-y-4">
         {tasks.map((task) => (
@@ -236,6 +373,17 @@ export default function TasksPage() {
           </Card>
         ))}
       </div>
+      <Pagination
+        className="rounded-lg border border-border bg-white px-4 pb-3 shadow-soft"
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => {
+          setPage(1);
+          setPageSize(value);
+        }}
+      />
     </div>
   );
 }

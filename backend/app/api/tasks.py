@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import RequestIdentity, require_role
@@ -18,11 +18,39 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 @router.get("", response_model=TaskListResponse)
 def list_tasks(
+    status: str | None = Query(default=None, max_length=40),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    tasks = db.scalars(select(Task).order_by(Task.created_at.desc()).limit(100)).all()
-    return {"items": tasks}
+    stmt = select(Task)
+    if status:
+        stmt = stmt.where(Task.status == status)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    tasks = db.scalars(
+        stmt.order_by(Task.created_at.desc(), Task.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    status_counts = dict(
+        db.execute(select(Task.status, func.count(Task.id)).group_by(Task.status)).all()
+    )
+    all_outputs = db.scalars(select(Task.output_data)).all()
+    return {
+        "items": tasks,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "stats": {
+            "total": sum(status_counts.values()),
+            "queued": status_counts.get("queued", 0),
+            "running": status_counts.get("running", 0),
+            "success": status_counts.get("success", 0),
+            "failed": status_counts.get("failed", 0),
+            "dead_letter": sum(1 for output in all_outputs if bool((output or {}).get("dead_letter"))),
+        },
+    }
 
 
 @router.get("/{task_id}", response_model=TaskRead)

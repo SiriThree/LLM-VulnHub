@@ -3,10 +3,19 @@ from datetime import datetime, timedelta, timezone
 import csv
 import io
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import CollectedDocument, IntelligenceItem, MergeCandidate, ReviewAction, Task, Vulnerability, VulnerabilityOccurrence
+from app.db.models import (
+    AnalysisJob,
+    CollectedDocument,
+    IntelligenceItem,
+    MergeCandidate,
+    ReviewAction,
+    Task,
+    Vulnerability,
+    VulnerabilityOccurrence,
+)
 from app.schemas.vulnerability import (
     VulnerabilityCreate,
     normalize_confidence_value,
@@ -101,7 +110,13 @@ def _build_publishable_extracted_payload(intel_item: IntelligenceItem) -> dict:
     return payload
 
 
-def list_intelligence_items(db: Session, status: str | None = None) -> list[IntelligenceItem]:
+def list_intelligence_items(
+    db: Session,
+    status: str | None = None,
+    *,
+    page: int = 1,
+    page_size: int = 10,
+) -> tuple[list[IntelligenceItem], int]:
     _repair_legacy_intelligence_statuses(db)
     for doc in db.scalars(select(CollectedDocument)).all():
         _ensure_intelligence_item_for_document(db, doc)
@@ -114,7 +129,9 @@ def list_intelligence_items(db: Session, status: str | None = None) -> list[Inte
             stmt = stmt.where(IntelligenceItem.status.in_(PUBLISHABLE_STATUSES))
         else:
             stmt = stmt.where(IntelligenceItem.status == status)
-    return list(db.scalars(stmt).all())
+    total = db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+    return list(db.scalars(stmt).all()), total
 
 
 def get_intelligence_item(db: Session, intel_item_id: int) -> IntelligenceItem | None:
@@ -433,7 +450,7 @@ def approve_intelligence_item(db: Session, intel_item_id: int, actor: str, notes
     intel_item = get_intelligence_item(db, intel_item_id)
     if not intel_item:
         return None
-    if intel_item.status not in PUBLISHABLE_STATUSES and not intel_item.vulnerability_id:
+    if intel_item.status not in PUBLISHABLE_STATUSES:
         raise ValueError("Only reviewable intelligence items can be approved into the vulnerability library.")
 
     before = {
@@ -465,6 +482,8 @@ def reject_intelligence_item(db: Session, intel_item_id: int, actor: str, notes:
     intel_item = get_intelligence_item(db, intel_item_id)
     if not intel_item:
         return None
+    if intel_item.status not in PUBLISHABLE_STATUSES:
+        raise ValueError("Only reviewable intelligence items can be rejected.")
 
     before = {
         "status": intel_item.status,
@@ -492,11 +511,15 @@ def approve_merge_candidate(db: Session, merge_candidate_id: int, actor: str, no
     candidate = db.get(MergeCandidate, merge_candidate_id)
     if not candidate:
         return None
+    if candidate.status != "pending":
+        raise ValueError("Only pending merge candidates can be approved.")
 
     intel_item = get_intelligence_item(db, candidate.intelligence_item_id)
     target_vuln = db.get(Vulnerability, candidate.candidate_vulnerability_id)
     if not intel_item or not target_vuln:
         return None
+    if intel_item.status not in PUBLISHABLE_STATUSES:
+        raise ValueError("Only reviewable intelligence items can be merged.")
 
     before = {
         "candidate_status": candidate.status,
@@ -527,7 +550,142 @@ def approve_merge_candidate(db: Session, merge_candidate_id: int, actor: str, no
     return candidate
 
 
+def _latest_direct_approval(db: Session, intel_item_id: int) -> ReviewAction | None:
+    return db.scalar(
+        select(ReviewAction)
+        .where(
+            ReviewAction.target_type == "intelligence_item",
+            ReviewAction.target_id == intel_item_id,
+            ReviewAction.action == "approve",
+        )
+        .order_by(ReviewAction.created_at.desc(), ReviewAction.id.desc())
+        .limit(1)
+    )
+
+
+def undo_intelligence_review(
+    db: Session,
+    intel_item_id: int,
+    actor: str,
+    notes: str | None = None,
+) -> IntelligenceItem | None:
+    intel_item = get_intelligence_item(db, intel_item_id)
+    if not intel_item:
+        return None
+    if intel_item.status in PUBLISHABLE_STATUSES and not intel_item.vulnerability_id:
+        raise ValueError("This intelligence item is already waiting for review.")
+
+    previous_vulnerability_id = intel_item.vulnerability_id
+    before = {
+        "status": intel_item.status,
+        "vulnerability_id": previous_vulnerability_id,
+        "review_notes": intel_item.review_notes,
+    }
+
+    if previous_vulnerability_id:
+        occurrences = db.scalars(
+            select(VulnerabilityOccurrence).where(
+                VulnerabilityOccurrence.intelligence_item_id == intel_item.id,
+                VulnerabilityOccurrence.vulnerability_id == previous_vulnerability_id,
+            )
+        ).all()
+        for occurrence in occurrences:
+            db.delete(occurrence)
+
+    if intel_item.collected_document:
+        intel_item.collected_document.vulnerability_id = None
+        intel_item.collected_document.status = "pending_review"
+
+    for job in intel_item.analysis_jobs or []:
+        if job.vulnerability_id == previous_vulnerability_id:
+            job.vulnerability_id = None
+
+    for candidate in intel_item.merge_candidates:
+        if candidate.status == "approved":
+            candidate.status = "pending"
+
+    intel_item.vulnerability_id = None
+    intel_item.status = "pending_review"
+    intel_item.review_notes = notes
+    db.flush()
+
+    deleted_orphan_vulnerability_id: int | None = None
+    if previous_vulnerability_id:
+        latest_approval = _latest_direct_approval(db, intel_item.id)
+        created_by_direct_approval = bool(
+            latest_approval
+            and latest_approval.before_snapshot.get("vulnerability_id") is None
+            and latest_approval.after_snapshot.get("vulnerability_id") == previous_vulnerability_id
+        )
+        other_intel_count = db.scalar(
+            select(func.count())
+            .select_from(IntelligenceItem)
+            .where(
+                IntelligenceItem.vulnerability_id == previous_vulnerability_id,
+                IntelligenceItem.id != intel_item.id,
+            )
+        ) or 0
+        other_occurrence_count = db.scalar(
+            select(func.count())
+            .select_from(VulnerabilityOccurrence)
+            .where(VulnerabilityOccurrence.vulnerability_id == previous_vulnerability_id)
+        ) or 0
+        other_document_count = db.scalar(
+            select(func.count())
+            .select_from(CollectedDocument)
+            .where(CollectedDocument.vulnerability_id == previous_vulnerability_id)
+        ) or 0
+        other_job_count = db.scalar(
+            select(func.count())
+            .select_from(AnalysisJob)
+            .where(AnalysisJob.vulnerability_id == previous_vulnerability_id)
+        ) or 0
+        candidate_reference_count = db.scalar(
+            select(func.count())
+            .select_from(MergeCandidate)
+            .where(MergeCandidate.candidate_vulnerability_id == previous_vulnerability_id)
+        ) or 0
+        if (
+            created_by_direct_approval
+            and other_intel_count == 0
+            and other_occurrence_count == 0
+            and other_document_count == 0
+            and other_job_count == 0
+            and candidate_reference_count == 0
+        ):
+            vulnerability = db.get(Vulnerability, previous_vulnerability_id)
+            if vulnerability:
+                db.delete(vulnerability)
+                deleted_orphan_vulnerability_id = previous_vulnerability_id
+
+    db.commit()
+    db.refresh(intel_item)
+    _record_review_action(
+        db,
+        actor=actor,
+        target_type="intelligence_item",
+        target_id=intel_item.id,
+        action="undo_review",
+        before_snapshot=before,
+        after_snapshot={
+            "status": intel_item.status,
+            "vulnerability_id": intel_item.vulnerability_id,
+            "review_notes": intel_item.review_notes,
+            "deleted_orphan_vulnerability_id": deleted_orphan_vulnerability_id,
+        },
+        reason=notes or "",
+    )
+    return intel_item
+
+
 def batch_approve_intelligence_items(db: Session, item_ids: list[int], actor: str, notes: str | None = None) -> list[IntelligenceItem]:
+    existing = {
+        item.id: item
+        for item in db.scalars(select(IntelligenceItem).where(IntelligenceItem.id.in_(item_ids))).all()
+    }
+    invalid_ids = [item_id for item_id in item_ids if item_id not in existing or existing[item_id].status not in PUBLISHABLE_STATUSES]
+    if invalid_ids:
+        raise ValueError(f"Items are missing or not reviewable: {invalid_ids}")
     items: list[IntelligenceItem] = []
     for item_id in item_ids:
         item = approve_intelligence_item(db, item_id, actor=actor, notes=notes)
@@ -537,9 +695,37 @@ def batch_approve_intelligence_items(db: Session, item_ids: list[int], actor: st
 
 
 def batch_reject_intelligence_items(db: Session, item_ids: list[int], actor: str, notes: str | None = None) -> list[IntelligenceItem]:
+    existing = {
+        item.id: item
+        for item in db.scalars(select(IntelligenceItem).where(IntelligenceItem.id.in_(item_ids))).all()
+    }
+    invalid_ids = [item_id for item_id in item_ids if item_id not in existing or existing[item_id].status not in PUBLISHABLE_STATUSES]
+    if invalid_ids:
+        raise ValueError(f"Items are missing or not reviewable: {invalid_ids}")
     items: list[IntelligenceItem] = []
     for item_id in item_ids:
         item = reject_intelligence_item(db, item_id, actor=actor, notes=notes)
+        if item:
+            items.append(item)
+    return items
+
+
+def batch_undo_intelligence_reviews(db: Session, item_ids: list[int], actor: str, notes: str | None = None) -> list[IntelligenceItem]:
+    existing = {
+        item.id: item
+        for item in db.scalars(select(IntelligenceItem).where(IntelligenceItem.id.in_(item_ids))).all()
+    }
+    invalid_ids = [
+        item_id
+        for item_id in item_ids
+        if item_id not in existing
+        or (existing[item_id].status in PUBLISHABLE_STATUSES and not existing[item_id].vulnerability_id)
+    ]
+    if invalid_ids:
+        raise ValueError(f"Items are missing or already waiting for review: {invalid_ids}")
+    items: list[IntelligenceItem] = []
+    for item_id in item_ids:
+        item = undo_intelligence_review(db, item_id, actor=actor, notes=notes)
         if item:
             items.append(item)
     return items
@@ -551,6 +737,8 @@ def list_review_actions(
     target_type: str | None = None,
     target_id: int | None = None,
     actor: str | None = None,
+    action: str | None = None,
+    offset: int = 0,
     limit: int = 50,
 ) -> list[ReviewAction]:
     stmt = select(ReviewAction).order_by(ReviewAction.created_at.desc(), ReviewAction.id.desc())
@@ -560,7 +748,51 @@ def list_review_actions(
         stmt = stmt.where(ReviewAction.target_id == target_id)
     if actor:
         stmt = stmt.where(ReviewAction.actor == actor)
-    stmt = stmt.limit(limit)
+    if action:
+        stmt = stmt.where(ReviewAction.action == action)
+    stmt = stmt.offset(offset).limit(limit)
+    return list(db.scalars(stmt).all())
+
+
+def count_review_actions(
+    db: Session,
+    *,
+    target_type: str | None = None,
+    target_id: int | None = None,
+    actor: str | None = None,
+    action: str | None = None,
+) -> int:
+    stmt = select(func.count(ReviewAction.id))
+    if target_type:
+        stmt = stmt.where(ReviewAction.target_type == target_type)
+    if target_id is not None:
+        stmt = stmt.where(ReviewAction.target_id == target_id)
+    if actor:
+        stmt = stmt.where(ReviewAction.actor == actor)
+    if action:
+        stmt = stmt.where(ReviewAction.action == action)
+    return db.scalar(stmt) or 0
+
+
+def list_intelligence_review_actions(db: Session, intel_item_id: int, limit: int = 50) -> list[ReviewAction]:
+    candidate_ids = select(MergeCandidate.id).where(MergeCandidate.intelligence_item_id == intel_item_id)
+    stmt = (
+        select(ReviewAction)
+        .where(
+            or_(
+                (
+                    (ReviewAction.target_type == "intelligence_item")
+                    & (ReviewAction.target_id == intel_item_id)
+                ),
+                (
+                    (ReviewAction.target_type == "merge_candidate")
+                    & ReviewAction.target_id.in_(candidate_ids)
+                ),
+            )
+        )
+        .order_by(ReviewAction.created_at.desc(), ReviewAction.id.desc())
+        .limit(limit)
+    )
     return list(db.scalars(stmt).all())
 
 
@@ -579,6 +811,7 @@ def get_review_stats(db: Session) -> dict:
         "approvals": sum(1 for action in actions if action.action == "approve"),
         "rejections": sum(1 for action in actions if action.action == "reject"),
         "merges": sum(1 for action in actions if action.action == "approve_merge"),
+        "undos": sum(1 for action in actions if action.action == "undo_review"),
         "unique_actors": len(actor_counter),
         "last_24h_actions": sum(1 for action in actions if _naive(action.created_at) and _naive(action.created_at) >= since),
         "top_actors": [{"actor": actor, "count": count} for actor, count in actor_counter.most_common(5)],

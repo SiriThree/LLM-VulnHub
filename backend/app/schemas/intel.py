@@ -55,6 +55,9 @@ class IntelligenceItemRead(BaseModel):
 
 class IntelligenceListResponse(BaseModel):
     items: list[IntelligenceItemRead]
+    total: int
+    page: int
+    page_size: int
 
 
 class ReviewDecisionRequest(BaseModel):
@@ -89,6 +92,9 @@ class ReviewActionRead(BaseModel):
 
 class ReviewActionListResponse(BaseModel):
     items: list[ReviewActionRead]
+    total: int
+    page: int
+    page_size: int
 
 
 class ReviewStatsRead(BaseModel):
@@ -96,6 +102,7 @@ class ReviewStatsRead(BaseModel):
     approvals: int
     rejections: int
     merges: int
+    undos: int
     unique_actors: int
     last_24h_actions: int
     top_actors: list[dict[str, int | str]]
