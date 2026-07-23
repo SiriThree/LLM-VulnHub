@@ -285,67 +285,135 @@ export default function CollectorsPage() {
       </div>
 
       <Card className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-semibold">来源可信度与产出质量</h2>
-            <p className="mt-1 text-sm text-slate-500">不是只看“有没有跑”，而是看这个源是否稳定、是否持续产出 AI 相关有效情报。</p>
+            <h2 className="font-semibold">采集源</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              共 {sourceTotal} 个来源，集中查看来源配置、运行状态、可信度与产出质量。
+            </p>
           </div>
-          <Button onClick={() => run()} disabled={submitting}>
-            <Play size={16} />
-            采集全部启用源
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-slate-500">
+              每页
+              <select
+                className="h-9 rounded-md border border-border bg-white px-2 text-slate-700"
+                value={sourcePageSize}
+                onChange={(event) => {
+                  setSourcePage(1);
+                  setSourcePageSize(Number(event.target.value));
+                }}
+              >
+                {[5, 10, 20, 50].map((value) => <option key={value} value={value}>{value} 条</option>)}
+              </select>
+            </label>
+            <Button onClick={() => run()} disabled={submitting}>
+              <Play size={16} />
+              采集全部启用源
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sourceHealth.map((source) => (
-            <div key={source.source_id} className="rounded-md border border-border p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{source.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {SOURCE_TYPE_LABELS[source.source_type] ?? source.source_type} | {SOURCE_STATUS_LABELS[source.status] ?? source.status}
+          {sources.map((source) => {
+            const health = sourceHealth.find((item) => item.source_id === source.id);
+            return (
+              <div key={source.id} className="rounded-md border border-border p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium">{source.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {SOURCE_TYPE_LABELS[source.source_type] ?? source.source_type}
+                      {" · "}
+                      {health ? SOURCE_STATUS_LABELS[health.status] ?? health.status : source.enabled ? "已启用" : "已停用"}
+                    </div>
                   </div>
+                  {health ? (
+                    <TrustBadge source={health} />
+                  ) : (
+                    <span className={`shrink-0 rounded px-2 py-1 text-xs ${source.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                      {source.enabled ? "已启用" : "已停用"}
+                    </span>
+                  )}
                 </div>
-                <TrustBadge source={source} />
+
+                <div className="mt-3 break-all rounded-md bg-slate-50 p-3 text-xs leading-5 text-slate-600">{source.url}</div>
+
+                {health ? (
+                  <>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600">
+                      <div>总文档 {health.documents_total}</div>
+                      <div>AI 命中 {health.ai_related_documents}</div>
+                      <div>待复核 {health.pending_review_documents}</div>
+                      <div>已入库 {health.stored_documents}</div>
+                      <div>去重命中 {health.duplicate_documents}</div>
+                      <div>成功率 {Math.round(health.success_rate * 100)}%</div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                      <div>请求成功 {Math.round(health.request_success_rate * 100)}%</div>
+                      <div>初筛通过 {Math.round(health.prefilter_pass_rate * 100)}%</div>
+                      <div>LLM 命中 {Math.round(health.llm_hit_rate * 100)}%</div>
+                      <div>入库转化 {Math.round(health.library_conversion_rate * 100)}%</div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {health.signals.map((signal) => (
+                        <span key={signal} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                          {signal}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-500">暂时没有该来源的运行质量数据。</div>
+                )}
+
+                <div className="mt-3 text-xs text-slate-400">
+                  周期 {source.interval_minutes} min · 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
+                  {health?.freshness_minutes != null ? ` · 距今 ${health.freshness_minutes} min` : ""}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button className="h-8" onClick={() => run(source.id)} disabled={submitting || !source.enabled}>
+                    <Play size={14} />
+                    立即采集
+                  </Button>
+                  {canManageSources ? (
+                    <Button
+                      type="button"
+                      className="h-8 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                      disabled={submitting}
+                      onClick={() => deleteSource(source)}
+                    >
+                      <Trash2 size={14} />
+                      删除来源
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600">
-                <div>总文档 {source.documents_total}</div>
-                <div>AI 命中 {source.ai_related_documents}</div>
-                <div>待复核 {source.pending_review_documents}</div>
-                <div>已入库 {source.stored_documents}</div>
-                <div>去重命中 {source.duplicate_documents}</div>
-                <div>成功率 {Math.round(source.success_rate * 100)}%</div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
-                <div>请求成功 {Math.round(source.request_success_rate * 100)}%</div>
-                <div>初筛通过 {Math.round(source.prefilter_pass_rate * 100)}%</div>
-                <div>LLM 命中 {Math.round(source.llm_hit_rate * 100)}%</div>
-                <div>入库转化 {Math.round(source.library_conversion_rate * 100)}%</div>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-500">
-                <div>候选 {source.recent_discovered}</div>
-                <div>初筛 {source.recent_prefilter_passed}</div>
-                <div>入库 {source.recent_saved}</div>
-              </div>
-              <div className="mt-3 text-xs text-slate-400">
-                最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
-                {source.freshness_minutes != null ? ` | 距今 ${source.freshness_minutes} min` : ""}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {source.signals.map((signal) => (
-                  <span key={signal} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
-                    {signal}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-4">
-                <Button className="h-8" onClick={() => run(source.source_id)} disabled={submitting || !source.enabled}>
-                  <Play size={14} />
-                  立即采集
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
+        </div>
+        {sources.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有采集源。</div> : null}
+        <div className="flex items-center justify-between border-t border-border pt-4 text-sm">
+          <span className="text-slate-500">
+            第 {sourcePage} / {Math.max(1, Math.ceil(sourceTotal / sourcePageSize))} 页
+          </span>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              className="border border-border bg-white text-slate-700"
+              disabled={sourcePage <= 1}
+              onClick={() => setSourcePage((current) => Math.max(1, current - 1))}
+            >
+              上一页
+            </Button>
+            <Button
+              type="button"
+              className="border border-border bg-white text-slate-700"
+              disabled={sourcePage >= Math.max(1, Math.ceil(sourceTotal / sourcePageSize))}
+              onClick={() => setSourcePage((current) => current + 1)}
+            >
+              下一页
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -467,82 +535,6 @@ export default function CollectorsPage() {
         </div>
       </Card>
 
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="font-semibold">原始来源清单</div>
-            <div className="mt-1 text-sm text-slate-500">共 {sourceTotal} 个来源；删除来源不会删除已采集的历史文档。</div>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-slate-500">
-            每页
-            <select
-              className="h-9 rounded-md border border-border bg-white px-2 text-slate-700"
-              value={sourcePageSize}
-              onChange={(event) => {
-                setSourcePage(1);
-                setSourcePageSize(Number(event.target.value));
-              }}
-            >
-              {[5, 10, 20, 50].map((value) => <option key={value} value={value}>{value} 条</option>)}
-            </select>
-          </label>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sources.map((source) => (
-            <div key={source.id} className="rounded-md border border-border p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{source.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">{SOURCE_TYPE_LABELS[source.source_type] ?? source.source_type}</div>
-                </div>
-                <span className={`rounded px-2 py-1 text-xs ${source.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                  {source.enabled ? "enabled" : "disabled"}
-                </span>
-              </div>
-              <div className="mt-3 break-all text-sm text-slate-600">{source.url}</div>
-              <div className="mt-3 text-xs text-slate-400">
-                周期 {source.interval_minutes} min | 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
-              </div>
-              {canManageSources ? (
-                <div className="mt-4">
-                  <Button
-                    type="button"
-                    className="h-8 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
-                    disabled={submitting}
-                    onClick={() => deleteSource(source)}
-                  >
-                    <Trash2 size={14} />
-                    删除来源
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between border-t border-border pt-4 text-sm">
-          <span className="text-slate-500">
-            第 {sourcePage} / {Math.max(1, Math.ceil(sourceTotal / sourcePageSize))} 页
-          </span>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              className="border border-border bg-white text-slate-700"
-              disabled={sourcePage <= 1}
-              onClick={() => setSourcePage((current) => Math.max(1, current - 1))}
-            >
-              上一页
-            </Button>
-            <Button
-              type="button"
-              className="border border-border bg-white text-slate-700"
-              disabled={sourcePage >= Math.max(1, Math.ceil(sourceTotal / sourcePageSize))}
-              onClick={() => setSourcePage((current) => current + 1)}
-            >
-              下一页
-            </Button>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }
