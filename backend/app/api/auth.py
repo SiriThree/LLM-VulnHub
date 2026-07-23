@@ -6,6 +6,7 @@ from app.core.security import (
     SESSION_COOKIE,
     RequestIdentity,
     authenticate_credentials,
+    issue_session,
     load_identity,
     require_role,
     revoke_session,
@@ -20,10 +21,8 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-@router.post("/login", response_model=SessionRead)
-def login(payload: LoginRequest, request: Request, response: Response):
+def _set_session_cookies(response: Response, session: RequestIdentity) -> None:
     settings = get_settings()
-    session = authenticate_credentials(payload.username, payload.password, _client_ip(request))
     response.set_cookie(
         SESSION_COOKIE,
         session.session_key,
@@ -43,6 +42,21 @@ def login(payload: LoginRequest, request: Request, response: Response):
         path="/",
     )
     response.headers["Cache-Control"] = "no-store"
+
+
+@router.post("/guest", response_model=SessionRead)
+def guest(request: Request, response: Response):
+    revoke_session(request.cookies.get(SESSION_COOKIE))
+    session = issue_session("guest", "guest")
+    _set_session_cookies(response, session)
+    return {"authenticated": True, "actor": session.actor, "role": session.role}
+
+
+@router.post("/login", response_model=SessionRead)
+def login(payload: LoginRequest, request: Request, response: Response):
+    session = authenticate_credentials(payload.username, payload.password, _client_ip(request))
+    revoke_session(request.cookies.get(SESSION_COOKIE))
+    _set_session_cookies(response, session)
     return {"authenticated": True, "actor": session.actor, "role": session.role}
 
 
@@ -59,7 +73,7 @@ def status(request: Request, response: Response):
 def logout(
     request: Request,
     response: Response,
-    identity: RequestIdentity = Depends(require_role("viewer")),
+    identity: RequestIdentity = Depends(require_role("guest")),
 ):
     revoke_session(request.cookies.get(SESSION_COOKIE))
     response.delete_cookie(SESSION_COOKIE, path="/")

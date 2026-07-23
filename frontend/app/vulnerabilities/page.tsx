@@ -3,7 +3,8 @@ import { Plus, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { api, Vulnerability } from "@/lib/api";
+import { GuestNotice } from "@/components/guest-notice";
+import { api, AuthSession, Vulnerability } from "@/lib/api";
 import { formatVulnerabilityStatus } from "@/lib/presentation";
 
 type ListResponse = { items: Vulnerability[]; total: number; page: number; page_size: number };
@@ -23,7 +24,13 @@ export default async function VulnerabilitiesPage({
   query.set("page", String(currentPage));
   query.set("page_size", String(pageSize));
   const empty: ListResponse = { items: [], total: 0, page: 1, page_size: 20 };
-  const data = await api<ListResponse>(`/vulnerabilities?${query}`).catch(() => empty);
+  const [data, session] = await Promise.all([
+    api<ListResponse>(`/vulnerabilities?${query}`).catch(() => empty),
+    api<AuthSession>("/auth/status").catch((): AuthSession => ({ authenticated: false })),
+  ]);
+  const role = session.role ?? "guest";
+  const isGuest = role === "guest";
+  const canOperate = role === "analyst" || role === "admin";
   const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
   const pageNumbers = Array.from(
     new Set([1, data.page - 1, data.page, data.page + 1, totalPages].filter((page) => page >= 1 && page <= totalPages)),
@@ -45,20 +52,24 @@ export default async function VulnerabilitiesPage({
 
   return (
     <div className="space-y-5">
+      {isGuest ? <GuestNotice /> : null}
+
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">漏洞库</h1>
           <p className="mt-1 text-sm text-slate-500">查询和维护经复核的标准化漏洞记录，支持筛选、详情查看与辅助抽取入库。</p>
         </div>
-        <div className="flex gap-2">
-          <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium" href="/vulnerabilities/new">
-            <Plus size={16} />
-            手动新增
-          </Link>
-          <Link className="inline-flex h-9 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white" href="/ai-extract">
-            辅助抽取
-          </Link>
-        </div>
+        {canOperate ? (
+          <div className="flex gap-2">
+            <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium" href="/vulnerabilities/new">
+              <Plus size={16} />
+              手动新增
+            </Link>
+            <Link className="inline-flex h-9 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white" href="/ai-extract">
+              辅助抽取
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       <form className="rounded-lg border border-border bg-white p-4 shadow-soft">

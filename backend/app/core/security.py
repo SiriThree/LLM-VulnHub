@@ -16,11 +16,13 @@ from app.core.config import get_settings
 
 
 ROLE_ORDER = {
+    "guest": 0,
     "viewer": 1,
     "analyst": 2,
     "admin": 3,
 }
 ROLE_VISIBILITIES = {
+    "guest": ("public",),
     "viewer": ("public",),
     "analyst": ("public", "internal"),
     "admin": ("public", "internal", "restricted"),
@@ -28,6 +30,7 @@ ROLE_VISIBILITIES = {
 SESSION_COOKIE = "llm_vulnhub_session"
 CSRF_COOKIE = "llm_vulnhub_csrf"
 PUBLIC_AUTH_PATHS = {
+    "/api/v1/auth/guest",
     "/api/v1/auth/login",
     "/api/v1/auth/status",
 }
@@ -99,6 +102,30 @@ def _configured_accounts() -> dict[str, tuple[str, str]]:
     return accounts
 
 
+def issue_session(actor: str, role: str) -> RequestIdentity:
+    if role not in ROLE_ORDER or not actor or len(actor) > 120:
+        raise ValueError("invalid session identity")
+    settings = get_settings()
+    raw_session = secrets.token_urlsafe(48)
+    csrf_token = secrets.token_urlsafe(32)
+    identity = RequestIdentity(
+        actor=actor,
+        role=role,
+        session_key=_session_key(raw_session),
+        csrf_token=csrf_token,
+    )
+    payload = json.dumps(
+        {
+            "actor": identity.actor,
+            "role": identity.role,
+            "csrf_token": identity.csrf_token,
+        },
+        separators=(",", ":"),
+    )
+    _redis_call("set", identity.session_key, payload, ex=settings.auth_session_ttl_seconds)
+    return identity.model_copy(update={"session_key": raw_session})
+
+
 def authenticate_credentials(username: str, password: str, client_ip: str) -> RequestIdentity:
     settings = get_settings()
     username = username.strip().lower()
@@ -123,24 +150,7 @@ def authenticate_credentials(username: str, password: str, client_ip: str) -> Re
         raise HTTPException(401, "invalid username or password")
 
     _redis_call("delete", attempt_key)
-    raw_session = secrets.token_urlsafe(48)
-    csrf_token = secrets.token_urlsafe(32)
-    identity = RequestIdentity(
-        actor=username,
-        role=account[1],
-        session_key=_session_key(raw_session),
-        csrf_token=csrf_token,
-    )
-    payload = json.dumps(
-        {
-            "actor": identity.actor,
-            "role": identity.role,
-            "csrf_token": identity.csrf_token,
-        },
-        separators=(",", ":"),
-    )
-    _redis_call("set", identity.session_key, payload, ex=settings.auth_session_ttl_seconds)
-    return identity.model_copy(update={"session_key": raw_session})
+    return issue_session(username, account[1])
 
 
 def load_identity(raw_session: str | None, *, refresh: bool = True) -> RequestIdentity | None:

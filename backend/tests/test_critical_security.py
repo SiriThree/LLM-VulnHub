@@ -2,18 +2,18 @@ import unittest
 from unittest.mock import patch
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.core.input_security import redact_sensitive_text
-from app.core.security import AuthenticationMiddleware, RequestIdentity
+from app.core.security import AuthenticationMiddleware, RequestIdentity, allowed_visibilities, require_role
 from app.db.models import DocumentChunk, RagQueryAudit, Vulnerability
 from app.db.session import Base
 from app.services.rag_service import record_rag_audit, search_similar
 from app.services.security_model_service import get_security_model
-from app.services.vulnerability_service import safe_legacy_external_url
+from app.services.vulnerability_service import safe_legacy_external_url, serialize_vulnerability_for_role
 
 
 class CriticalSecurityTests(unittest.IsolatedAsyncioTestCase):
@@ -81,6 +81,13 @@ class CriticalSecurityTests(unittest.IsolatedAsyncioTestCase):
             "https://example.com/advisory",
         )
 
+    def test_guest_is_read_only_and_only_sees_public_visibility(self):
+        guest = RequestIdentity(actor="guest", role="guest", session_key="stored", csrf_token="csrf")
+        self.assertEqual(allowed_visibilities("guest"), ("public",))
+        with self.assertRaises(HTTPException) as raised:
+            require_role("viewer")(guest)
+        self.assertEqual(raised.exception.status_code, 403)
+
     def test_rag_filters_records_before_scoring_and_audits_without_full_query(self):
         engine = create_engine(
             "sqlite://",
@@ -123,6 +130,12 @@ class CriticalSecurityTests(unittest.IsolatedAsyncioTestCase):
                 {hit["vulnerability"].visibility for hit in admin_hits},
                 {"public", "internal", "restricted"},
             )
+
+            public_record = db.scalar(select(Vulnerability).where(Vulnerability.visibility == "public"))
+            guest_payload = serialize_vulnerability_for_role(public_record, "guest")
+            self.assertEqual(guest_payload["attack_method"], "访客模式不展示攻击复现细节。")
+            self.assertIsNone(guest_payload["source_url"])
+            self.assertEqual(guest_payload["confidence"], 0.0)
 
             query = "password=SecretValue123 find prompt injection"
             record_rag_audit(

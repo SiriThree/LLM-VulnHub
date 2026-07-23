@@ -3,7 +3,8 @@ import { ArrowRight, Database, Radar, ShieldAlert } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { api, Vulnerability } from "@/lib/api";
+import { GuestNotice } from "@/components/guest-notice";
+import { api, AuthSession, Vulnerability } from "@/lib/api";
 import { formatSeverity } from "@/lib/presentation";
 
 type Stats = {
@@ -46,12 +47,20 @@ export default async function DashboardPage() {
     high_risk: [],
   };
 
-  const stats = await api<Stats>("/vulnerabilities/dashboard").catch(() => emptyStats);
+  const [stats, session] = await Promise.all([
+    api<Stats>("/vulnerabilities/dashboard").catch(() => emptyStats),
+    api<AuthSession>("/auth/status").catch((): AuthSession => ({ authenticated: false })),
+  ]);
+  const role = session.role ?? "guest";
+  const isGuest = role === "guest";
+  const canOperate = role === "analyst" || role === "admin";
   const criticalHigh = (stats.severity_distribution["严重"] ?? 0) + (stats.severity_distribution["高危"] ?? 0);
   const mediumLow = (stats.severity_distribution["中危"] ?? 0) + (stats.severity_distribution["低危"] ?? 0);
 
   return (
     <div className="space-y-6">
+      {isGuest ? <GuestNotice /> : null}
+
       <section className="rounded-xl border border-border bg-white p-5 shadow-soft sm:p-6">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
@@ -60,14 +69,23 @@ export default async function DashboardPage() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">集中查看已入库漏洞、风险分布和近期处置重点。</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/collectors">
-              <Radar size={16} />
-              查看采集链路
-            </Link>
-            <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-medium text-slate-700" href="/ai-extract">
-              <Database size={16} />
-              新增漏洞记录
-            </Link>
+            {canOperate ? (
+              <>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/collectors">
+                  <Radar size={16} />
+                  查看采集链路
+                </Link>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-medium text-slate-700" href="/ai-extract">
+                  <Database size={16} />
+                  新增漏洞记录
+                </Link>
+              </>
+            ) : (
+              <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/vulnerabilities">
+                <Database size={16} />
+                浏览公开漏洞
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -157,10 +175,12 @@ export default async function DashboardPage() {
               <h2 className="font-semibold">高优先级漏洞</h2>
               <p className="mt-1 text-sm text-slate-500">按风险分值排序，便于安排复核和处置顺序。</p>
             </div>
-            <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" href="/intel-pool">
-              查看情报池
-              <ArrowRight size={14} />
-            </Link>
+            {canOperate ? (
+              <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" href="/intel-pool">
+                查看情报池
+                <ArrowRight size={14} />
+              </Link>
+            ) : null}
           </div>
           <div className="space-y-3">
             {stats.high_risk.length ? stats.high_risk.map((vulnerability) => (

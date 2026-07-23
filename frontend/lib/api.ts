@@ -616,7 +616,7 @@ export type TaskListResponse = {
 export type AuthSession = {
   authenticated: boolean;
   actor?: string | null;
-  role?: "viewer" | "analyst" | "admin" | null;
+  role?: "guest" | "viewer" | "analyst" | "admin" | null;
 };
 
 type AuthContext = {

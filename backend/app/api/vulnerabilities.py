@@ -19,6 +19,7 @@ from app.services.vulnerability_service import (
     list_vulnerabilities,
     serialize_vulnerability_lineage,
     serialize_vulnerability,
+    serialize_vulnerability_for_role,
     serialize_vulnerability_detail,
     update_vulnerability,
 )
@@ -36,16 +37,21 @@ def list_api(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    identity: RequestIdentity = Depends(require_role("viewer")),
+    identity: RequestIdentity = Depends(require_role("guest")),
 ):
     items, total = list_vulnerabilities(db, q, severity, vuln_type, component, status, page, page_size, identity.role)
-    return {"items": [serialize_vulnerability(v) for v in items], "total": total, "page": page, "page_size": page_size}
+    return {
+        "items": [serialize_vulnerability_for_role(v, identity.role) for v in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/dashboard", response_model=DashboardStats)
 def dashboard_api(
     db: Session = Depends(get_db),
-    identity: RequestIdentity = Depends(require_role("viewer")),
+    identity: RequestIdentity = Depends(require_role("guest")),
 ):
     return dashboard_stats(db, identity.role)
 
@@ -54,7 +60,7 @@ def dashboard_api(
 def get_api(
     vuln_id: int,
     db: Session = Depends(get_db),
-    identity: RequestIdentity = Depends(require_role("viewer")),
+    identity: RequestIdentity = Depends(require_role("guest")),
 ):
     vuln = (
         db.query(Vulnerability)
@@ -73,7 +79,7 @@ def get_api(
     )
     if not vuln:
         raise HTTPException(404, "vulnerability not found")
-    return serialize_vulnerability_detail(vuln)
+    return serialize_vulnerability_detail(vuln, identity.role)
 
 
 @router.get("/{vuln_id}/lineage", response_model=VulnerabilityLineageRead)
