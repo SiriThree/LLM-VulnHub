@@ -24,11 +24,20 @@ def list_notifications(
     event_type: str | None = Query(default=None, max_length=80),
     status: str | None = Query(default=None, max_length=40),
     acknowledged: bool | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": list_notification_events(db, event_type=event_type, status=status, acknowledged=acknowledged, limit=limit)}
+    items, total = list_notification_events(
+        db,
+        event_type=event_type,
+        status=status,
+        acknowledged=acknowledged,
+        page=page,
+        page_size=page_size,
+    )
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 @router.post("/{task_id}/acknowledge", response_model=NotificationEventRead)
@@ -62,4 +71,5 @@ def batch_acknowledge(
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": batch_acknowledge_notifications(db, payload.task_ids, actor=identity.actor, note=payload.note)}
+    items = batch_acknowledge_notifications(db, payload.task_ids, actor=identity.actor, note=payload.note)
+    return {"items": items, "total": len(items), "page": 1, "page_size": max(1, len(items))}

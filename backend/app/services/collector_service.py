@@ -9,7 +9,7 @@ from typing import Any
 
 import feedparser
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -32,6 +32,10 @@ from app.services.provenance_service import build_source_health
 from app.workflows.vuln_analysis_graph import analyze_text, get_analysis_job_snapshot
 
 settings = get_settings()
+
+
+class DuplicateSourceError(ValueError):
+    pass
 
 TASK_STAGE_ORDER = [
     "queued",
@@ -289,6 +293,14 @@ def utcnow() -> datetime:
 def create_source(db: Session, payload: DataSourceCreate) -> DataSource:
     data = payload.model_dump()
     data["url"] = validate_source_location(data["source_type"], data["url"])
+    duplicate = db.scalar(
+        select(DataSource).where(
+            DataSource.source_type == data["source_type"],
+            func.lower(DataSource.url) == data["url"].lower(),
+        )
+    )
+    if duplicate:
+        raise DuplicateSourceError(f"Source already exists as #{duplicate.id}: {duplicate.name}")
     source = DataSource(**data)
     db.add(source)
     db.commit()
@@ -304,6 +316,15 @@ def update_source(db: Session, source_id: int, payload: DataSourceUpdate) -> Dat
     source_type = data.get("source_type", source.source_type)
     source_url = data.get("url", source.url)
     data["url"] = validate_source_location(source_type, source_url)
+    duplicate = db.scalar(
+        select(DataSource).where(
+            DataSource.id != source_id,
+            DataSource.source_type == source_type,
+            func.lower(DataSource.url) == data["url"].lower(),
+        )
+    )
+    if duplicate:
+        raise DuplicateSourceError(f"Source already exists as #{duplicate.id}: {duplicate.name}")
     for key, value in data.items():
         setattr(source, key, value)
     db.commit()

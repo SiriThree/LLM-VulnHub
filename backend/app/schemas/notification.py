@@ -30,6 +30,9 @@ class NotificationEventRead(BaseModel):
 
 class NotificationListResponse(BaseModel):
     items: list[NotificationEventRead]
+    total: int
+    page: int
+    page_size: int
 
 
 class NotificationAcknowledgeRequest(BaseModel):

@@ -2,12 +2,23 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowRight, Play, Plus, RefreshCw, ShieldAlert } from "lucide-react";
+import { Activity, ArrowRight, Play, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api, CollectedDocument, CollectorOverview, DataSource, SourceHealth, TaskListResponse, TaskRecord } from "@/lib/api";
+import { PageHero } from "@/components/page-hero";
+import {
+  api,
+  AuthSession,
+  CollectedDocument,
+  CollectorOverview,
+  DataSource,
+  DataSourceListResponse,
+  SourceHealth,
+  TaskListResponse,
+  TaskRecord,
+} from "@/lib/api";
 import { useSessionDraft } from "@/lib/use-session-draft";
 
 type RunResponse = {
@@ -62,6 +73,10 @@ export default function CollectorsPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [canManageSources, setCanManageSources] = useState(false);
+  const [sourcePage, setSourcePage] = useState(1);
+  const [sourcePageSize, setSourcePageSize] = useState(10);
+  const [sourceTotal, setSourceTotal] = useState(0);
   const [form, setForm, { clearDraft: clearSourceDraft }] = useSessionDraft(
     "llm-vulnhub:collector-source-draft:v1",
     DEFAULT_SOURCE_FORM,
@@ -69,11 +84,23 @@ export default function CollectorsPage() {
 
   async function load() {
     const [sourceList, overviewRes, taskList] = await Promise.all([
-      api<DataSource[]>("/sources").catch(() => []),
+      api<DataSourceListResponse>(`/sources?page=${sourcePage}&page_size=${sourcePageSize}`).catch(() => ({
+        items: [],
+        total: 0,
+        page: sourcePage,
+        page_size: sourcePageSize,
+      })),
       api<CollectorOverview>("/collectors/overview").catch(() => null),
-      api<TaskListResponse>("/tasks").catch(() => ({ items: [] })),
+      api<TaskListResponse>("/tasks?page_size=50").catch(() => ({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 50,
+        stats: { total: 0, queued: 0, running: 0, success: 0, failed: 0, dead_letter: 0 },
+      })),
     ]);
-    setSources(sourceList);
+    setSources(sourceList.items);
+    setSourceTotal(sourceList.total);
     setOverview(overviewRes);
     setTasks(taskList.items.filter((task) => task.task_type === "crawl").slice(0, 8));
   }
@@ -82,6 +109,12 @@ export default function CollectorsPage() {
     load();
     const timer = window.setInterval(load, 5000);
     return () => window.clearInterval(timer);
+  }, [sourcePage, sourcePageSize]);
+
+  useEffect(() => {
+    api<AuthSession>("/auth/status")
+      .then((session) => setCanManageSources(session.role === "admin"))
+      .catch(() => setCanManageSources(false));
   }, []);
 
   async function createSource() {
@@ -94,9 +127,32 @@ export default function CollectorsPage() {
       });
       clearSourceDraft();
       setMessage("数据源已添加。");
-      await load();
+      if (sourcePage !== 1) {
+        setSourcePage(1);
+      } else {
+        await load();
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "添加数据源失败。");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function deleteSource(source: DataSource) {
+    if (!canManageSources || !window.confirm(`确认删除数据源“${source.name}”？历史采集文档会保留。`)) return;
+    setSubmitting(true);
+    setMessage("");
+    try {
+      await api(`/sources/${source.id}`, { method: "DELETE" });
+      setMessage(`数据源“${source.name}”已删除，历史采集记录仍保留。`);
+      if (sources.length === 1 && sourcePage > 1) {
+        setSourcePage((current) => current - 1);
+      } else {
+        await load();
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除数据源失败。");
     } finally {
       setSubmitting(false);
     }
@@ -144,18 +200,15 @@ export default function CollectorsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">动态采集控制台</h1>
-          <p className="text-sm text-slate-500">
-            这里展示真实采集链路的运行状态，以及每条情报从数据源到复核入库的可信度信号。
-          </p>
-        </div>
-        <Button type="button" className="border border-border bg-white text-slate-700" onClick={load}>
+      <PageHero
+        title="动态采集控制台"
+        description="展示采集链路运行状态，以及每条情报从数据源到复核入库的可信度信号。"
+        eyebrow="外部情报接入"
+        actions={<Button type="button" className="border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={load}>
           <RefreshCw size={16} />
           刷新
-        </Button>
-      </div>
+        </Button>}
+      />
 
       {message ? <div className="rounded-md border border-border bg-white p-3 text-sm">{message}</div> : null}
 
@@ -194,7 +247,7 @@ export default function CollectorsPage() {
               onChange={(e) => setForm({ ...form, url: e.target.value })}
               placeholder="URL / 文件路径"
             />
-            <Button onClick={createSource} disabled={submitting}>
+            <Button onClick={createSource} disabled={submitting || !canManageSources}>
               <Plus size={16} />
               添加
             </Button>
@@ -415,7 +468,25 @@ export default function CollectorsPage() {
       </Card>
 
       <Card className="space-y-4">
-        <div className="font-semibold">原始来源清单</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">原始来源清单</div>
+            <div className="mt-1 text-sm text-slate-500">共 {sourceTotal} 个来源；删除来源不会删除已采集的历史文档。</div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-500">
+            每页
+            <select
+              className="h-9 rounded-md border border-border bg-white px-2 text-slate-700"
+              value={sourcePageSize}
+              onChange={(event) => {
+                setSourcePage(1);
+                setSourcePageSize(Number(event.target.value));
+              }}
+            >
+              {[5, 10, 20, 50].map((value) => <option key={value} value={value}>{value} 条</option>)}
+            </select>
+          </label>
+        </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sources.map((source) => (
             <div key={source.id} className="rounded-md border border-border p-4">
@@ -432,8 +503,44 @@ export default function CollectorsPage() {
               <div className="mt-3 text-xs text-slate-400">
                 周期 {source.interval_minutes} min | 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
               </div>
+              {canManageSources ? (
+                <div className="mt-4">
+                  <Button
+                    type="button"
+                    className="h-8 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                    disabled={submitting}
+                    onClick={() => deleteSource(source)}
+                  >
+                    <Trash2 size={14} />
+                    删除来源
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ))}
+        </div>
+        <div className="flex items-center justify-between border-t border-border pt-4 text-sm">
+          <span className="text-slate-500">
+            第 {sourcePage} / {Math.max(1, Math.ceil(sourceTotal / sourcePageSize))} 页
+          </span>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              className="border border-border bg-white text-slate-700"
+              disabled={sourcePage <= 1}
+              onClick={() => setSourcePage((current) => Math.max(1, current - 1))}
+            >
+              上一页
+            </Button>
+            <Button
+              type="button"
+              className="border border-border bg-white text-slate-700"
+              disabled={sourcePage >= Math.max(1, Math.ceil(sourceTotal / sourcePageSize))}
+              onClick={() => setSourcePage((current) => current + 1)}
+            >
+              下一页
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

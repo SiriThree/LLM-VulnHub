@@ -2,6 +2,7 @@ import { Activity, AlertTriangle, Clock3, Database, ListChecks, RadioTower, Serv
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { PageHero } from "@/components/page-hero";
 import { api, OpsMetrics, SchedulerOverview } from "@/lib/api";
 
 function formatDate(value?: string | null) {
@@ -86,16 +87,15 @@ export default async function OpsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">运行运营</h1>
-          <p className="mt-1 text-sm text-slate-500">集中查看采集调度、任务队列、数据源健康度和模型调用状态。</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+      <PageHero
+        title="运行运营"
+        description="集中查看采集调度、任务队列、数据源健康度和模型调用状态。"
+        eyebrow="运行态势"
+        actions={<div className="flex items-center gap-2 text-sm text-slate-300">
           <Clock3 size={16} />
           <span>调度源 {scheduler.sources.length} 个，Beat 任务 {scheduler.beat_jobs.length} 个</span>
-        </div>
-      </div>
+        </div>}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="队列中" value={metrics.queue_metrics.queued} hint="等待 worker 消费" icon={ListChecks} />

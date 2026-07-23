@@ -4,6 +4,7 @@ import { Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { GuestNotice } from "@/components/guest-notice";
+import { PageHero } from "@/components/page-hero";
 import { api, AuthSession, Vulnerability } from "@/lib/api";
 import { formatVulnerabilityStatus } from "@/lib/presentation";
 
@@ -54,26 +55,25 @@ export default async function VulnerabilitiesPage({
     <div className="space-y-5">
       {isGuest ? <GuestNotice /> : null}
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">漏洞库</h1>
-          <p className="mt-1 text-sm text-slate-500">查询和维护经复核的标准化漏洞记录，支持筛选、详情查看与辅助抽取入库。</p>
-        </div>
-        {canOperate ? (
+      <PageHero
+        title="漏洞库"
+        description="查询和维护经复核的标准化漏洞记录，支持筛选、详情查看与辅助抽取入库。"
+        eyebrow="标准化漏洞知识"
+        actions={canOperate ? (
           <div className="flex gap-2">
-            <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium" href="/vulnerabilities/new">
+            <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-white/20 bg-white/10 px-3 text-sm font-medium text-white hover:bg-white/20" href="/vulnerabilities/new">
               <Plus size={16} />
               手动新增
             </Link>
-            <Link className="inline-flex h-9 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white" href="/ai-extract">
+            <Link className="inline-flex h-9 items-center rounded-md bg-white px-3 text-sm font-medium text-slate-950 hover:bg-slate-100" href="/ai-extract">
               辅助抽取
             </Link>
           </div>
         ) : null}
-      </div>
+      />
 
       <form className="rounded-lg border border-border bg-white p-4 shadow-soft">
-        <div className="grid gap-3 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
+        <div className="grid gap-3 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto_auto]">
           <div className="flex items-center gap-2 rounded-md border border-border px-3">
             <Search size={16} />
             <input name="q" defaultValue={sp.q ?? ""} className="h-10 flex-1 bg-transparent text-sm outline-none" placeholder="搜索标题、描述、影响组件" />
@@ -88,6 +88,9 @@ export default async function VulnerabilitiesPage({
           <input name="vuln_type" defaultValue={sp.vuln_type ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="漏洞类型" />
           <input name="component" defaultValue={sp.component ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="影响组件" />
           <input name="status" defaultValue={sp.status ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="状态" />
+          <select name="page_size" defaultValue={String(pageSize)} className="h-10 rounded-md border border-border bg-white px-3 text-sm">
+            {[5, 10, 20, 50].map((value) => <option key={value} value={value}>每页 {value} 条</option>)}
+          </select>
           <button className="inline-flex h-10 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white">筛选</button>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -120,16 +123,16 @@ export default async function VulnerabilitiesPage({
 
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1260px] table-fixed border-collapse text-sm">
+          <table className="w-full min-w-[1240px] table-fixed border-collapse text-sm">
             <colgroup>
-              <col className="w-[32%]" />
-              <col className="w-[15%]" />
+              <col className="w-[290px]" />
+              <col className="w-[150px]" />
               <col className="w-[72px]" />
               <col className="w-[64px]" />
-              <col className="w-[34%]" />
-              <col className="w-[96px]" />
-              <col className="w-[128px]" />
-              <col className="w-[76px]" />
+              <col className="w-[220px]" />
+              <col className="w-[100px]" />
+              <col className="w-[190px]" />
+              <col className="w-[110px]" />
             </colgroup>
             <thead>
               <tr className="border-b border-border bg-slate-50 text-left text-slate-500">
@@ -161,8 +164,8 @@ export default async function VulnerabilitiesPage({
                     <div className="line-clamp-2">{vulnerability.affected_component}</div>
                   </td>
                   <td className="p-3 whitespace-nowrap">{formatVulnerabilityStatus(vulnerability.status)}</td>
-                  <td className="p-3 whitespace-nowrap">{new Date(vulnerability.created_at).toLocaleString()}</td>
-                  <td className="p-3 whitespace-nowrap">
+                  <td className="whitespace-nowrap px-3 py-3 pr-5">{new Date(vulnerability.created_at).toLocaleString()}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
                     <Link className="text-primary hover:underline" href={`/vulnerabilities/${vulnerability.id}`}>
                       查看详情
                     </Link>

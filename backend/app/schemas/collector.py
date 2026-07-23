@@ -38,6 +38,13 @@ class DataSourceRead(DataSourceBase):
     updated_at: datetime
 
 
+class DataSourceListResponse(BaseModel):
+    items: list[DataSourceRead]
+    total: int
+    page: int
+    page_size: int
+
+
 class CollectedDocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

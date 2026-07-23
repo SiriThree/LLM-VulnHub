@@ -4,6 +4,7 @@ import { ArrowRight, Database, Radar, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { GuestNotice } from "@/components/guest-notice";
+import { PageHero } from "@/components/page-hero";
 import { api, AuthSession, Vulnerability } from "@/lib/api";
 import { formatSeverity } from "@/lib/presentation";
 
@@ -61,34 +62,30 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       {isGuest ? <GuestNotice /> : null}
 
-      <section className="rounded-xl border border-border bg-white p-5 shadow-soft sm:p-6">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-primary">风险工作台</div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">漏洞情报运营总览</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">集中查看已入库漏洞、风险分布和近期处置重点。</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
+      <PageHero
+        title="漏洞情报运营总览"
+        description="集中查看已入库漏洞、风险分布和近期处置重点。"
+        eyebrow="风险工作台"
+        actions={<div className="flex flex-wrap gap-3">
             {canOperate ? (
               <>
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/collectors">
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-4 text-sm font-medium text-slate-950 hover:bg-slate-100" href="/collectors">
                   <Radar size={16} />
                   查看采集链路
                 </Link>
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-medium text-slate-700" href="/ai-extract">
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-white/20 bg-white/10 px-4 text-sm font-medium text-white hover:bg-white/20" href="/ai-extract">
                   <Database size={16} />
                   新增漏洞记录
                 </Link>
               </>
             ) : (
-              <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white" href="/vulnerabilities">
+              <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-4 text-sm font-medium text-slate-950 hover:bg-slate-100" href="/vulnerabilities">
                 <Database size={16} />
                 浏览公开漏洞
               </Link>
             )}
-          </div>
-        </div>
-      </section>
+          </div>}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { GuestNotice } from "@/components/guest-notice";
+import { PageHero } from "@/components/page-hero";
 import { VulnerabilityForm } from "@/components/vulnerability-form";
 import { api, AuthSession, VulnerabilityDetail, VulnerabilityLineage } from "@/lib/api";
 
@@ -48,20 +49,14 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
     <div className="space-y-5">
       {isGuest ? <GuestNotice detail /> : null}
 
-      <div className="flex items-start justify-between">
-        <div>
-          <Link className="text-sm text-primary" href="/vulnerabilities">
-            返回漏洞库
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold">{vulnerability.title}</h1>
-        </div>
-        <div className="flex gap-2">
-          <Badge>{vulnerability.severity}</Badge>
-          <span className="rounded bg-muted px-2 py-1 text-xs font-medium">{vulnerability.score} 分</span>
-        </div>
-      </div>
+      <PageHero
+        title={vulnerability.title}
+        description={`${vulnerability.vuln_type} · ${vulnerability.affected_component}`}
+        eyebrow={`${vulnerability.severity} · ${vulnerability.score} 分`}
+        actions={<Link className="text-sm text-slate-200 hover:text-white" href="/vulnerabilities">返回漏洞库</Link>}
+      />
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card><div className="text-xs text-slate-500">漏洞类型</div><div className="mt-1 font-medium">{vulnerability.vuln_type}</div></Card>
         <Card><div className="text-xs text-slate-500">影响组件</div><div className="mt-1 font-medium">{vulnerability.affected_component}</div></Card>
         <Card><div className="text-xs text-slate-500">状态</div><div className="mt-1 font-medium">{vulnerability.status}</div></Card>
