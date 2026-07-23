@@ -510,7 +510,7 @@ export default function CollectorsPage() {
           {sources.map((source) => {
             const health = sourceHealth.find((item) => item.source_id === source.id);
             return (
-              <div key={source.id} className="rounded-md border border-border p-4">
+              <div key={source.id} className="flex h-full flex-col rounded-md border border-border p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-medium">{source.name}</div>
@@ -563,8 +563,8 @@ export default function CollectorsPage() {
                   周期 {source.interval_minutes} min · 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
                   {health?.freshness_minutes != null ? ` · 距今 ${health.freshness_minutes} min` : ""}
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button className="h-8" onClick={() => run(source.id)} disabled={submitting || !source.enabled}>
+                <div className={`mt-auto grid gap-2 pt-4 ${canManageSources ? "grid-cols-3" : "grid-cols-1"}`}>
+                  <Button className="h-8 w-full gap-1 px-2 text-xs" onClick={() => run(source.id)} disabled={submitting || !source.enabled}>
                     <Play size={14} />
                     立即采集
                   </Button>
@@ -572,7 +572,7 @@ export default function CollectorsPage() {
                     <>
                       <Button
                         type="button"
-                        className="h-8 border border-border bg-white text-slate-700"
+                        className="h-8 w-full gap-1 border border-border bg-white px-2 text-xs text-slate-700"
                         disabled={submitting}
                         onClick={() => startEditingSource(source)}
                       >
@@ -581,7 +581,7 @@ export default function CollectorsPage() {
                       </Button>
                       <Button
                         type="button"
-                        className="h-8 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                        className="h-8 w-full gap-1 border border-rose-200 bg-white px-2 text-xs text-rose-700 hover:bg-rose-50"
                         disabled={submitting}
                         onClick={() => deleteSource(source)}
                       >
