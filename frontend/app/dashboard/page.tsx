@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { GuestNotice } from "@/components/guest-notice";
 import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import { api, AuthSession, Vulnerability } from "@/lib/api";
 import { formatSeverity } from "@/lib/presentation";
 
@@ -38,7 +39,17 @@ function Bars({ data }: { data: Record<string, number> }) {
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const sp = await searchParams;
+  const recentPage = Math.max(1, Number(sp.recent_page ?? 1) || 1);
+  const recentPageSize = Math.max(1, Number(sp.recent_page_size ?? 5) || 5);
+  const highPage = Math.max(1, Number(sp.high_page ?? 1) || 1);
+  const highPageSize = Math.max(1, Number(sp.high_page_size ?? 5) || 5);
+  const paginationQuery = { ...sp };
   const emptyStats: Stats = {
     total: 0,
     severity_distribution: {},
@@ -57,6 +68,8 @@ export default async function DashboardPage() {
   const canOperate = role === "analyst" || role === "admin";
   const criticalHigh = (stats.severity_distribution["严重"] ?? 0) + (stats.severity_distribution["高危"] ?? 0);
   const mediumLow = (stats.severity_distribution["中危"] ?? 0) + (stats.severity_distribution["低危"] ?? 0);
+  const recentItems = stats.recent.slice((recentPage - 1) * recentPageSize, recentPage * recentPageSize);
+  const highRiskItems = stats.high_risk.slice((highPage - 1) * highPageSize, highPage * highPageSize);
 
   return (
     <div className="space-y-6">
@@ -150,7 +163,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <div className="space-y-3">
-            {stats.recent.length ? stats.recent.map((vulnerability) => (
+            {recentItems.length ? recentItems.map((vulnerability) => (
               <Link
                 className="flex items-center justify-between rounded-md border border-border p-3 text-sm transition hover:bg-slate-50"
                 href={`/vulnerabilities/${vulnerability.id}`}
@@ -164,6 +177,15 @@ export default async function DashboardPage() {
               </Link>
             )) : <EmptyState>尚无已入库记录</EmptyState>}
           </div>
+          <Pagination
+            total={stats.recent.length}
+            page={recentPage}
+            pageSize={recentPageSize}
+            basePath="/dashboard"
+            query={paginationQuery}
+            pageParam="recent_page"
+            pageSizeParam="recent_page_size"
+          />
         </Card>
 
         <Card>
@@ -180,7 +202,7 @@ export default async function DashboardPage() {
             ) : null}
           </div>
           <div className="space-y-3">
-            {stats.high_risk.length ? stats.high_risk.map((vulnerability) => (
+            {highRiskItems.length ? highRiskItems.map((vulnerability) => (
               <Link
                 className="flex items-center justify-between rounded-md border border-border p-3 text-sm transition hover:bg-slate-50"
                 href={`/vulnerabilities/${vulnerability.id}`}
@@ -199,6 +221,15 @@ export default async function DashboardPage() {
               </Link>
             )) : <EmptyState>尚无高优先级记录</EmptyState>}
           </div>
+          <Pagination
+            total={stats.high_risk.length}
+            page={highPage}
+            pageSize={highPageSize}
+            basePath="/dashboard"
+            query={paginationQuery}
+            pageParam="high_page"
+            pageSizeParam="high_page_size"
+          />
         </Card>
       </div>
     </div>

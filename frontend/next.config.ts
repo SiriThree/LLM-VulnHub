@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-const internalApiBase = process.env.INTERNAL_API_BASE ?? "http://backend:8000/api/v1";
-
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
@@ -22,10 +20,19 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     const internalApiBase = process.env.INTERNAL_API_BASE ?? "http://localhost:8000/api/v1";
+    const internalBackendBase = internalApiBase.replace(/\/api\/v1\/?$/, "");
     return [
       {
         source: "/api/v1/:path*",
         destination: `${internalApiBase}/:path*`,
+      },
+      {
+        source: "/docs",
+        destination: `${internalBackendBase}/docs`,
+      },
+      {
+        source: "/openapi.json",
+        destination: `${internalBackendBase}/openapi.json`,
       },
     ];
   },

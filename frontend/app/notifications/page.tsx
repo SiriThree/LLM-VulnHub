@@ -29,7 +29,7 @@ export default function NotificationsPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
 
   async function load() {
@@ -108,7 +108,7 @@ export default function NotificationsPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card><div className="text-sm text-slate-500">筛选结果</div><div className="mt-3 text-4xl font-semibold">{total}</div></Card>
+        <Card><div className="text-sm text-slate-500">当页记录</div><div className="mt-3 text-4xl font-semibold">{items.length}</div></Card>
         <Card><div className="text-sm text-slate-500">未读通知</div><div className="mt-3 text-4xl font-semibold">{counts.unread}</div></Card>
         <Card><div className="text-sm text-slate-500">高风险待复核</div><div className="mt-3 text-4xl font-semibold">{counts.highRisk}</div></Card>
         <Card><div className="text-sm text-slate-500">源采集失败</div><div className="mt-3 text-4xl font-semibold">{counts.sourceFailure}</div></Card>

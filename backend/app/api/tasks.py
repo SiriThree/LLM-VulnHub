@@ -20,7 +20,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 def list_tasks(
     status: str | None = Query(default=None, max_length=40),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=10, ge=1, le=100),
+    page_size: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):

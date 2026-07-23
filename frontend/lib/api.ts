@@ -150,6 +150,9 @@ export type ReviewAction = {
 
 export type ReviewActionListResponse = {
   items: ReviewAction[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 
 export type ReviewStats = {

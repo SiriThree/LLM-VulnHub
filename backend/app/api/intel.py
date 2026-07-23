@@ -24,6 +24,7 @@ from app.services.intel_service import (
     batch_approve_intelligence_items,
     batch_reject_intelligence_items,
     batch_undo_intelligence_reviews,
+    count_review_actions,
     export_review_actions_csv,
     get_intelligence_item,
     get_intelligence_lineage,
@@ -44,7 +45,7 @@ router = APIRouter(prefix="/intel", tags=["intel"])
 def list_items(
     status: str | None = Query(default=None, max_length=40),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=10, ge=1, le=100),
+    page_size: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
@@ -101,17 +102,32 @@ def list_item_actions(
     item = get_intelligence_item(db, intel_item_id)
     if not item:
         raise HTTPException(404, "intelligence item not found")
-    return {"items": list_intelligence_review_actions(db, intel_item_id)}
+    items = list_intelligence_review_actions(db, intel_item_id)
+    return {"items": items, "total": len(items), "page": 1, "page_size": max(1, len(items))}
 
 
 @router.get("/review-actions", response_model=ReviewActionListResponse)
 def list_all_review_actions(
     actor: str | None = Query(default=None, max_length=120),
-    limit: int = Query(default=50, ge=1, le=200),
+    action: str | None = Query(default=None, max_length=40),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("analyst")),
 ):
-    return {"items": list_review_actions(db, actor=actor, limit=limit)}
+    total = count_review_actions(db, actor=actor, action=action)
+    return {
+        "items": list_review_actions(
+            db,
+            actor=actor,
+            action=action,
+            offset=(page - 1) * page_size,
+            limit=page_size,
+        ),
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/review-actions/export", response_class=PlainTextResponse)

@@ -737,6 +737,8 @@ def list_review_actions(
     target_type: str | None = None,
     target_id: int | None = None,
     actor: str | None = None,
+    action: str | None = None,
+    offset: int = 0,
     limit: int = 50,
 ) -> list[ReviewAction]:
     stmt = select(ReviewAction).order_by(ReviewAction.created_at.desc(), ReviewAction.id.desc())
@@ -746,8 +748,30 @@ def list_review_actions(
         stmt = stmt.where(ReviewAction.target_id == target_id)
     if actor:
         stmt = stmt.where(ReviewAction.actor == actor)
-    stmt = stmt.limit(limit)
+    if action:
+        stmt = stmt.where(ReviewAction.action == action)
+    stmt = stmt.offset(offset).limit(limit)
     return list(db.scalars(stmt).all())
+
+
+def count_review_actions(
+    db: Session,
+    *,
+    target_type: str | None = None,
+    target_id: int | None = None,
+    actor: str | None = None,
+    action: str | None = None,
+) -> int:
+    stmt = select(func.count(ReviewAction.id))
+    if target_type:
+        stmt = stmt.where(ReviewAction.target_type == target_type)
+    if target_id is not None:
+        stmt = stmt.where(ReviewAction.target_id == target_id)
+    if actor:
+        stmt = stmt.where(ReviewAction.actor == actor)
+    if action:
+        stmt = stmt.where(ReviewAction.action == action)
+    return db.scalar(stmt) or 0
 
 
 def list_intelligence_review_actions(db: Session, intel_item_id: int, limit: int = 50) -> list[ReviewAction]:

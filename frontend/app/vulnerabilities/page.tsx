@@ -18,14 +18,14 @@ export default async function VulnerabilitiesPage({
 }) {
   const sp = await searchParams;
   const currentPage = Math.max(1, Number(sp.page ?? 1) || 1);
-  const pageSize = Math.min(100, Math.max(1, Number(sp.page_size ?? 20) || 20));
+  const pageSize = Math.min(100, Math.max(1, Number(sp.page_size ?? 5) || 5));
   const query = new URLSearchParams();
   for (const key of ["q", "severity", "vuln_type", "component", "status", "page", "page_size"]) {
     if (sp[key]) query.set(key, sp[key]!);
   }
   query.set("page", String(currentPage));
   query.set("page_size", String(pageSize));
-  const empty: ListResponse = { items: [], total: 0, page: 1, page_size: 20 };
+  const empty: ListResponse = { items: [], total: 0, page: 1, page_size: 5 };
   const [data, session] = await Promise.all([
     api<ListResponse>(`/vulnerabilities?${query}`).catch(() => empty),
     api<AuthSession>("/auth/status").catch((): AuthSession => ({ authenticated: false })),

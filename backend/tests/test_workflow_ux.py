@@ -20,6 +20,8 @@ from app.services.collector_service import DuplicateSourceError, create_source, 
 from app.services.intel_service import (
     approve_intelligence_item,
     approve_merge_candidate,
+    count_review_actions,
+    list_review_actions,
     undo_intelligence_review,
 )
 
@@ -119,6 +121,29 @@ class WorkflowUxTests(unittest.TestCase):
             approve_intelligence_item(self.db, item.id, actor="analyst")
         with self.assertRaises(ValueError):
             approve_merge_candidate(self.db, candidate.id, actor="analyst")
+
+    def test_review_actions_support_category_pagination(self):
+        for index, action in enumerate(["approve", "reject", "approve", "undo_review", "approve_merge", "approve"]):
+            self.db.add(
+                ReviewAction(
+                    actor="analyst",
+                    target_type="intelligence_item",
+                    target_id=index + 1,
+                    action=action,
+                    before_snapshot={},
+                    after_snapshot={},
+                    reason=f"action {index}",
+                )
+            )
+        self.db.commit()
+
+        first_page = list_review_actions(self.db, action="approve", offset=0, limit=2)
+        second_page = list_review_actions(self.db, action="approve", offset=2, limit=2)
+
+        self.assertEqual(count_review_actions(self.db, action="approve"), 3)
+        self.assertEqual(len(first_page), 2)
+        self.assertEqual(len(second_page), 1)
+        self.assertTrue(all(item.action == "approve" for item in first_page + second_page))
 
     def test_undo_merge_restores_review_state_and_records_history(self):
         source = DataSource(name="Source", source_type="rss", url="https://example.com/feed.xml")

@@ -92,6 +92,9 @@ class ReviewActionRead(BaseModel):
 
 class ReviewActionListResponse(BaseModel):
     items: list[ReviewActionRead]
+    total: int
+    page: int
+    page_size: int
 
 
 class ReviewStatsRead(BaseModel):

@@ -46,6 +46,14 @@ const ACTION_LABELS: Record<string, string> = {
   undo_review: "撤销审核",
 };
 
+const ACTION_OPTIONS = [
+  { value: "", label: "全部审核动作" },
+  { value: "approve", label: "通过发布" },
+  { value: "reject", label: "驳回" },
+  { value: "approve_merge", label: "合并发布" },
+  { value: "undo_review", label: "撤销审核" },
+];
+
 const PUBLISHABLE_STATUSES = new Set(["pending_review", "triaged"]);
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 
@@ -78,12 +86,16 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   );
   const [actions, setActions] = useState<ReviewAction[]>([]);
   const [globalActions, setGlobalActions] = useState<ReviewAction[]>([]);
+  const [globalActionType, setGlobalActionType] = useState("");
+  const [globalActionPage, setGlobalActionPage] = useState(1);
+  const [globalActionPageSize, setGlobalActionPageSize] = useState(5);
+  const [globalActionTotal, setGlobalActionTotal] = useState(0);
   const [stats, setStats] = useState<IntelligenceStats | null>(null);
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [lineage, setLineage] = useState<IntelligenceLineage | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
 
   async function load(nextSelectedId?: number | null) {
@@ -109,7 +121,12 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   }
 
   async function loadActions(intelItemId: number) {
-    const res = await api<ReviewActionListResponse>(`/intel/items/${intelItemId}/actions`).catch(() => ({ items: [] }));
+    const res = await api<ReviewActionListResponse>(`/intel/items/${intelItemId}/actions`).catch(() => ({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 5,
+    }));
     setActions(res.items);
   }
 
@@ -119,8 +136,19 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   }
 
   async function loadGlobalActions() {
-    const res = await api<ReviewActionListResponse>("/intel/review-actions?limit=12").catch(() => ({ items: [] }));
+    const query = new URLSearchParams({
+      page: String(globalActionPage),
+      page_size: String(globalActionPageSize),
+    });
+    if (globalActionType) query.set("action", globalActionType);
+    const res = await api<ReviewActionListResponse>(`/intel/review-actions?${query}`).catch(() => ({
+      items: [],
+      total: 0,
+      page: globalActionPage,
+      page_size: globalActionPageSize,
+    }));
     setGlobalActions(res.items);
+    setGlobalActionTotal(res.total);
   }
 
   async function loadStats() {
@@ -137,8 +165,11 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
     load();
     loadStats();
     loadReviewStats();
-    loadGlobalActions();
   }, [status, page, pageSize]);
+
+  useEffect(() => {
+    loadGlobalActions();
+  }, [globalActionType, globalActionPage, globalActionPageSize]);
 
   useEffect(() => {
     if (selectedId) {
@@ -686,10 +717,27 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         </Card>
       </div>
 
-      <Card>
-        <div className="mb-3 font-semibold">全局审核动态</div>
+      <Card className="flex flex-col">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">全局审核动态</div>
+            <div className="mt-1 text-sm text-slate-500">按审核动作分类查看历史记录。</div>
+          </div>
+          <select
+            className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            value={globalActionType}
+            onChange={(event) => {
+              setGlobalActionPage(1);
+              setGlobalActionType(event.target.value);
+            }}
+          >
+            {ACTION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
         {globalActions.length > 0 ? (
-          <div className="space-y-3">
+          <div className="flex-1 space-y-3" style={{ minHeight: `${globalActionPageSize * 104}px` }}>
             {globalActions.map((action) => (
               <div key={action.id} className="flex items-start justify-between gap-4 rounded-md border border-border bg-white p-3 text-sm">
                 <div>
@@ -704,6 +752,16 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         ) : (
           <div className="text-sm text-slate-500">当前还没有审核动态。</div>
         )}
+        <Pagination
+          total={globalActionTotal}
+          page={globalActionPage}
+          pageSize={globalActionPageSize}
+          onPageChange={setGlobalActionPage}
+          onPageSizeChange={(value) => {
+            setGlobalActionPage(1);
+            setGlobalActionPageSize(value);
+          }}
+        />
       </Card>
     </div>
   );

@@ -79,7 +79,7 @@ export default function CollectorsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [canManageSources, setCanManageSources] = useState(false);
   const [sourcePage, setSourcePage] = useState(1);
-  const [sourcePageSize, setSourcePageSize] = useState(10);
+  const [sourcePageSize, setSourcePageSize] = useState(5);
   const [sourceTotal, setSourceTotal] = useState(0);
   const [pendingPage, setPendingPage] = useState(1);
   const [pendingPageSize, setPendingPageSize] = useState(5);
@@ -87,6 +87,8 @@ export default function CollectorsPage() {
   const [recentPageSize, setRecentPageSize] = useState(5);
   const [runsPage, setRunsPage] = useState(1);
   const [runsPageSize, setRunsPageSize] = useState(5);
+  const [activeTaskPage, setActiveTaskPage] = useState(1);
+  const [activeTaskPageSize, setActiveTaskPageSize] = useState(5);
   const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<SourceEditForm | null>(null);
   const [form, setForm, { clearDraft: clearSourceDraft }] = useSessionDraft(
@@ -127,7 +129,7 @@ export default function CollectorsPage() {
       setRecentPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.recent_documents_total / recentPageSize))));
       setRunsPage((current) => Math.min(current, Math.max(1, Math.ceil(overviewRes.recent_runs_total / runsPageSize))));
     }
-    setTasks(taskList.items.filter((task) => task.task_type === "crawl").slice(0, 8));
+    setTasks(taskList.items.filter((task) => task.task_type === "crawl"));
   }
 
   useEffect(() => {
@@ -258,6 +260,10 @@ export default function CollectorsPage() {
     () => tasks.filter((task) => task.status === "queued" || task.status === "running"),
     [tasks],
   );
+  const activeTaskItems = activeTasks.slice(
+    (activeTaskPage - 1) * activeTaskPageSize,
+    activeTaskPage * activeTaskPageSize,
+  );
 
   const pendingDocs = overview?.pending_documents ?? [];
   const recentDocs = overview?.recent_documents ?? [];
@@ -332,7 +338,7 @@ export default function CollectorsPage() {
 
           {activeTasks.length > 0 ? (
             <div className="space-y-3">
-              {activeTasks.map((task) => (
+              {activeTaskItems.map((task) => (
                 <div key={task.id} className="rounded-md border border-border bg-slate-50 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="font-medium">任务 #{task.id}</div>
@@ -348,6 +354,16 @@ export default function CollectorsPage() {
           ) : (
             <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有运行中的采集任务。</div>
           )}
+          <Pagination
+            total={activeTasks.length}
+            page={activeTaskPage}
+            pageSize={activeTaskPageSize}
+            onPageChange={setActiveTaskPage}
+            onPageSizeChange={(value) => {
+              setActiveTaskPage(1);
+              setActiveTaskPageSize(value);
+            }}
+          />
         </Card>
       </div>
 

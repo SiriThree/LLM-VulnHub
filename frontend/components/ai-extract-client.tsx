@@ -6,6 +6,7 @@ import { BadgeCheck, Bot, CheckCircle2, FlaskConical, Play, Save, Sparkles } fro
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
+import { Pagination } from "@/components/pagination";
 import {
   AnalyzeResult,
   api,
@@ -131,6 +132,10 @@ export function AiExtractClient() {
   const [latestEval, setLatestEval] = useState<EvalRunDetail | null>(null);
   const [evalLoading, setEvalLoading] = useState(true);
   const [evalRunning, setEvalRunning] = useState(false);
+  const [samplePage, setSamplePage] = useState(1);
+  const [samplePageSize, setSamplePageSize] = useState(5);
+  const [evalRunPage, setEvalRunPage] = useState(1);
+  const [evalRunPageSize, setEvalRunPageSize] = useState(5);
 
   const modifiedFields = useMemo(() => {
     if (!originalResult || !result) return [];
@@ -213,6 +218,7 @@ export function AiExtractClient() {
       const latest = await api<EvalRunDetail>("/ai/evaluation/run", { method: "POST" });
       setLatestEval(latest);
       setEvalRuns((current) => [latest, ...current.filter((item) => item.file_name !== latest.file_name)]);
+      setEvalRunPage(1);
       setMessage(`已完成回归评测：${latest.file_name}`);
       setMode("quality");
     } catch (error) {
@@ -549,7 +555,9 @@ export function AiExtractClient() {
             <h2 className="font-semibold">按样本查看评测表现</h2>
             {latestEval ? (
               <div className="space-y-3">
-                {latestEval.samples.slice(0, 12).map((item) => (
+                {latestEval.samples
+                  .slice((samplePage - 1) * samplePageSize, samplePage * samplePageSize)
+                  .map((item) => (
                   <div key={item.id} className="rounded-md border border-border p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="font-medium">{item.id}</div>
@@ -579,17 +587,29 @@ export function AiExtractClient() {
                     ) : null}
                     {item.errors.length > 0 ? <div className="mt-2 text-sm text-rose-600">{item.errors.join(" | ")}</div> : null}
                   </div>
-                ))}
+                  ))}
               </div>
             ) : (
               <div className="text-sm text-slate-500">先运行一次评测，就能看到逐样本结果。</div>
             )}
+            <Pagination
+              total={latestEval?.samples.length ?? 0}
+              page={samplePage}
+              pageSize={samplePageSize}
+              onPageChange={setSamplePage}
+              onPageSizeChange={(value) => {
+                setSamplePage(1);
+                setSamplePageSize(value);
+              }}
+            />
           </Card>
 
           <Card className="space-y-4">
             <h2 className="font-semibold">历史评测记录</h2>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {evalRuns.map((item) => (
+              {evalRuns
+                .slice((evalRunPage - 1) * evalRunPageSize, evalRunPage * evalRunPageSize)
+                .map((item) => (
                 <div key={item.file_name} className="rounded-md border border-border p-3">
                   <div className="font-medium">{item.file_name}</div>
                   <div className="mt-1 text-xs text-slate-500">{item.provider} · {new Date(item.generated_at).toLocaleString()}</div>
@@ -600,9 +620,19 @@ export function AiExtractClient() {
                     <div>Merge Precision：{pct(item.merge_precision)}</div>
                   </div>
                 </div>
-              ))}
+                ))}
               {!evalLoading && evalRuns.length === 0 ? <div className="text-sm text-slate-500">还没有评测记录。</div> : null}
             </div>
+            <Pagination
+              total={evalRuns.length}
+              page={evalRunPage}
+              pageSize={evalRunPageSize}
+              onPageChange={setEvalRunPage}
+              onPageSizeChange={(value) => {
+                setEvalRunPage(1);
+                setEvalRunPageSize(value);
+              }}
+            />
           </Card>
         </div>
       )}
