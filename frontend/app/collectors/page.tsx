@@ -170,7 +170,7 @@ export default function CollectorsPage() {
             <p className="mt-1 text-sm text-slate-500">支持 RSS、安全博客页面、官方公告页和 GitHub Advisory。</p>
           </div>
           <div className="grid gap-3 md:grid-cols-5">
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="数据源名称" />
+            <Input maxLength={160} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="数据源名称" />
             <select
               className="h-10 rounded-md border border-border bg-background px-3 text-sm"
               value={form.source_type}
@@ -182,6 +182,7 @@ export default function CollectorsPage() {
             </select>
             <Input
               className="md:col-span-2"
+              maxLength={800}
               value={form.url}
               onChange={(e) => setForm({ ...form, url: e.target.value })}
               placeholder="URL / 文件路径"

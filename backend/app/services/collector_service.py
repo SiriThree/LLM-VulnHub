@@ -5,17 +5,25 @@ import json
 import threading
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import feedparser
 import httpx
-from bs4 import BeautifulSoup
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import get_settings
+from app.core.input_security import (
+    MAX_SOURCE_RESPONSE_BYTES,
+    MAX_UNTRUSTED_TEXT_CHARS,
+    InputSecurityError,
+    resolve_local_source_path,
+    safe_http_get,
+    sanitize_html_text,
+    sanitize_plain_text,
+    validate_source_location,
+)
 from app.db.models import CollectedDocument, DataSource, IntelligenceItem, MergeCandidate, Task, Vulnerability
 from app.db.session import SessionLocal
 from app.schemas.collector import DataSourceCreate, DataSourceUpdate
@@ -24,8 +32,6 @@ from app.services.provenance_service import build_source_health
 from app.workflows.vuln_analysis_graph import analyze_text, get_analysis_job_snapshot
 
 settings = get_settings()
-AUTO_PUBLISH_CONFIDENCE = 0.9
-AUTO_PUBLISH_MIN_SCORE = 70
 
 TASK_STAGE_ORDER = [
     "queued",
@@ -281,7 +287,9 @@ def utcnow() -> datetime:
 
 
 def create_source(db: Session, payload: DataSourceCreate) -> DataSource:
-    source = DataSource(**payload.model_dump())
+    data = payload.model_dump()
+    data["url"] = validate_source_location(data["source_type"], data["url"])
+    source = DataSource(**data)
     db.add(source)
     db.commit()
     db.refresh(source)
@@ -292,7 +300,11 @@ def update_source(db: Session, source_id: int, payload: DataSourceUpdate) -> Dat
     source = db.get(DataSource, source_id)
     if not source:
         return None
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    source_type = data.get("source_type", source.source_type)
+    source_url = data.get("url", source.url)
+    data["url"] = validate_source_location(source_type, source_url)
+    for key, value in data.items():
         setattr(source, key, value)
     db.commit()
     db.refresh(source)
@@ -309,18 +321,6 @@ def _intel_status(is_related: bool, confidence: float) -> str:
     if confidence >= 0.5:
         return "pending_review"
     return "triaged"
-
-
-def _should_auto_publish(state: dict[str, Any], *, is_related: bool, confidence: float) -> bool:
-    if not is_related:
-        return False
-    if confidence < AUTO_PUBLISH_CONFIDENCE:
-        return False
-    if int(state.get("score", 0) or 0) < AUTO_PUBLISH_MIN_SCORE:
-        return False
-    if state.get("similar"):
-        return False
-    return bool(state.get("publishable"))
 
 
 def _json_safe_vulnerability_snapshot(vulnerability: Vulnerability) -> dict[str, Any]:
@@ -699,19 +699,21 @@ def _record_source_analysis_result(db: Session, source_id: int | None, *, is_rel
 
 async def fetch_candidates(source: DataSource) -> list[dict[str, str]]:
     if source.source_type == "local_file":
-        path = Path(source.url)
-        if not path.exists() and source.url.startswith("../data/"):
-            path = Path("../data") / Path(source.url).name
+        path = resolve_local_source_path(source.url)
+        if not path.exists() or not path.is_file():
+            raise InputSecurityError("local source file does not exist")
+        if path.stat().st_size > MAX_SOURCE_RESPONSE_BYTES:
+            raise InputSecurityError("local source file exceeds the configured byte limit")
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             data = data.get("items", [])
         return [
             {
-                "title": item.get("title", "local item"),
+                "title": sanitize_plain_text(item.get("title", "local item"), max_chars=300),
                 "url": item.get("url", source.url),
-                "raw_text": item.get("raw_text") or item.get("text", ""),
+                "raw_text": sanitize_plain_text(item.get("raw_text") or item.get("text", "")),
             }
-            for item in data
+            for item in data[:100]
         ]
 
     headers = {
@@ -721,12 +723,12 @@ async def fetch_candidates(source: DataSource) -> list[dict[str, str]]:
     if settings.github_token and (source.source_type == "github" or "api.github.com" in source.url):
         headers["Authorization"] = f"Bearer {settings.github_token}"
 
-    async with httpx.AsyncClient(timeout=45, follow_redirects=True, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=45, follow_redirects=False, headers=headers, trust_env=False) as client:
         async def get_with_retry(url: str) -> httpx.Response:
             last_exc: Exception | None = None
             for attempt in range(3):
                 try:
-                    response = await client.get(url)
+                    response = await safe_http_get(client, url, max_bytes=MAX_SOURCE_RESPONSE_BYTES)
                     if response.status_code < 500:
                         return response
                     last_exc = RuntimeError(f"HTTP {response.status_code}")
@@ -755,8 +757,8 @@ async def fetch_candidates(source: DataSource) -> list[dict[str, str]]:
                 advisories = advisories.get("items", [])
             candidates = []
             for item in advisories:
-                summary = item.get("summary", "")
-                description = item.get("description", "")
+                summary = sanitize_plain_text(item.get("summary", ""), max_chars=4_000)
+                description = sanitize_plain_text(item.get("description", ""), max_chars=12_000)
                 severity = item.get("severity", "")
                 identifier = item.get("cve_id") or item.get("ghsa_id") or ""
                 title = f"{identifier} {summary}".strip() if identifier else summary or "github advisory"
@@ -764,11 +766,11 @@ async def fetch_candidates(source: DataSource) -> list[dict[str, str]]:
                     ref.get("url", "") if isinstance(ref, dict) else str(ref)
                     for ref in item.get("references", [])[:5]
                 )
-                raw_text = " ".join(
+                raw_text = sanitize_plain_text(" ".join(
                     part
                     for part in [summary, description, f"severity: {severity}" if severity else "", item.get("html_url", ""), refs]
                     if part
-                )
+                ), max_chars=16_000)
                 candidates.append(
                     {
                         "title": title[:300],
@@ -784,19 +786,15 @@ async def fetch_candidates(source: DataSource) -> list[dict[str, str]]:
         feed = feedparser.parse(body)
         return [
             {
-                "title": entry.get("title", "rss item"),
+                "title": sanitize_plain_text(entry.get("title", "rss item"), max_chars=300),
                 "url": entry.get("link", source.url),
-                "raw_text": " ".join([entry.get("title", ""), entry.get("summary", "")]),
+                "raw_text": sanitize_html_text(" ".join([entry.get("title", ""), entry.get("summary", "")])),
             }
             for entry in feed.entries[:30]
         ]
 
-    soup = BeautifulSoup(body, "html.parser")
-    for tag in soup(["script", "style", "nav", "footer"]):
-        tag.decompose()
-    title = soup.title.text.strip() if soup.title else source.name
-    text = " ".join(soup.get_text(" ").split())
-    return [{"title": title, "url": source.url, "raw_text": text[:12000]}]
+    text = sanitize_html_text(body, max_chars=MAX_UNTRUSTED_TEXT_CHARS)
+    return [{"title": sanitize_plain_text(source.name, max_chars=300), "url": source.url, "raw_text": text}]
 
 
 def dispatch_collection_task(task_id: int) -> None:
@@ -1131,17 +1129,10 @@ async def _run_analysis(db: Session, task: Task) -> dict[str, Any]:
             )
         db.commit()
 
+        # Collected content is untrusted and must never publish itself into the
+        # canonical vulnerability library or RAG index. Publication is only
+        # reachable through an authenticated analyst review action.
         auto_published = False
-        if _should_auto_publish(state, is_related=is_related, confidence=confidence):
-            from app.services.intel_service import publish_intelligence_item
-
-            intel_item = publish_intelligence_item(
-                db,
-                intel_item,
-                notes="Auto-published by high-confidence collector pipeline.",
-            )
-            doc = intel_item.collected_document or doc
-            auto_published = True
 
         output = dict(task.output_data or {})
         output["agent_summary"] = [
@@ -1406,7 +1397,7 @@ async def _process_source(db: Session, task: Task, source: DataSource) -> None:
 
 
 async def _process_candidate(db: Session, task: Task, source: DataSource, item: dict[str, str]) -> None:
-    raw_text = item.get("raw_text", "").strip()
+    raw_text = sanitize_plain_text(item.get("raw_text", ""), max_chars=MAX_UNTRUSTED_TEXT_CHARS)
     if not raw_text:
         return
 

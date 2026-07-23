@@ -120,7 +120,9 @@ async def extract_api(payload: ExtractRequest, db: Session = Depends(get_db)):
 
 @router.post("/analyze", response_model=AnalyzeResult)
 async def analyze_api(payload: AnalyzeRequest, db: Session = Depends(get_db)):
-    state = await analyze_text(db, payload.raw_text, payload.source_url, save=payload.save)
+    if payload.save:
+        raise HTTPException(400, "direct model publication is disabled; confirm the analysis after manual review")
+    state = await analyze_text(db, payload.raw_text, payload.source_url, save=False)
     vulnerability = None
     if state.get("vulnerability_id"):
         vulnerability = serialize_vulnerability(db.get(Vulnerability, state["vulnerability_id"]))

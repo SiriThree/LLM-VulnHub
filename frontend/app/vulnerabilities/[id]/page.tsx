@@ -5,6 +5,16 @@ import { Card } from "@/components/ui/card";
 import { VulnerabilityForm } from "@/components/vulnerability-form";
 import { api, VulnerabilityDetail, VulnerabilityLineage } from "@/lib/api";
 
+function isSafeExternalUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export default async function DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [vulnerability, lineage] = await Promise.all([
@@ -59,11 +69,19 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
             <div><span className="text-slate-500">标签：</span>{vulnerability.tags.join("、") || "暂无"}</div>
             <div className="col-span-2">
               <span className="text-slate-500">参考链接：</span>
-              {vulnerability.reference_url ? <a className="text-primary hover:underline" href={vulnerability.reference_url}>{vulnerability.reference_url}</a> : "暂无"}
+              {isSafeExternalUrl(vulnerability.reference_url) ? (
+                <a className="break-all text-primary hover:underline" href={vulnerability.reference_url} rel="noopener noreferrer" target="_blank">
+                  {vulnerability.reference_url}
+                </a>
+              ) : "暂无"}
             </div>
             <div className="col-span-2">
               <span className="text-slate-500">来源链接：</span>
-              {vulnerability.source_url ? <a className="text-primary hover:underline" href={vulnerability.source_url}>{vulnerability.source_url}</a> : "暂无"}
+              {isSafeExternalUrl(vulnerability.source_url) ? (
+                <a className="break-all text-primary hover:underline" href={vulnerability.source_url} rel="noopener noreferrer" target="_blank">
+                  {vulnerability.source_url}
+                </a>
+              ) : "暂无"}
             </div>
           </div>
 

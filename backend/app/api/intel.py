@@ -37,7 +37,7 @@ router = APIRouter(prefix="/intel", tags=["intel"])
 
 
 @router.get("/items", response_model=IntelligenceListResponse)
-def list_items(status: str | None = Query(default=None), db: Session = Depends(get_db)):
+def list_items(status: str | None = Query(default=None, max_length=40), db: Session = Depends(get_db)):
     return {"items": list_intelligence_items(db, status=status)}
 
 
@@ -77,7 +77,7 @@ def list_item_actions(intel_item_id: int, db: Session = Depends(get_db)):
 
 @router.get("/review-actions", response_model=ReviewActionListResponse)
 def list_all_review_actions(
-    actor: str | None = Query(default=None),
+    actor: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
@@ -86,7 +86,7 @@ def list_all_review_actions(
 
 @router.get("/review-actions/export", response_class=PlainTextResponse)
 def export_review_actions(
-    actor: str | None = Query(default=None),
+    actor: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=500, ge=1, le=2000),
     db: Session = Depends(get_db),
     identity: RequestIdentity = Depends(require_role("admin")),
@@ -144,7 +144,7 @@ def batch_reject_items(
 @router.get("/merge-candidates", response_model=list[MergeCandidateRead])
 def get_merge_candidates(
     intel_item_id: int | None = Query(default=None),
-    status: str | None = Query(default=None),
+    status: str | None = Query(default=None, max_length=40),
     db: Session = Depends(get_db),
 ):
     return list_merge_candidates(db, intel_item_id=intel_item_id, status=status)

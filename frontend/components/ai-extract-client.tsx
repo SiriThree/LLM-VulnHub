@@ -249,7 +249,12 @@ export function AiExtractClient() {
                 <h2 className="font-semibold">原始漏洞文本</h2>
                 <p className="mt-1 text-sm text-slate-500">输入原文后执行相关性判断、字段抽取、风险评分和相似记录比对。</p>
               </div>
-              <Textarea className="min-h-[480px]" value={raw} onChange={(event) => setRaw(event.target.value)} />
+              <Textarea
+                className="min-h-[480px]"
+                maxLength={12000}
+                value={raw}
+                onChange={(event) => setRaw(event.target.value)}
+              />
               <div className="flex flex-wrap items-center gap-3">
                 <Button disabled={loading} onClick={handleExtract} type="button">
                   <Bot size={16} />
@@ -303,12 +308,14 @@ export function AiExtractClient() {
                           {LONG_FIELDS.has(key) ? (
                             <Textarea
                               className={changed ? "border-amber-300" : ""}
+                              maxLength={12000}
                               value={String(result[key] ?? "")}
                               onChange={(event) => updateField(key, event.target.value)}
                             />
                           ) : (
                             <Input
                               className={changed ? "border-amber-300" : ""}
+                              maxLength={300}
                               value={String(result[key] ?? "")}
                               onChange={(event) => updateField(key, event.target.value)}
                             />
@@ -371,6 +378,7 @@ export function AiExtractClient() {
                     </p>
                     <Textarea
                       className="min-h-24"
+                      maxLength={2000}
                       placeholder="填写人工复核说明，例如：补充修复建议、修正漏洞类型、确认是否入库。"
                       value={reviewNote}
                       onChange={(event) => setReviewNote(event.target.value)}

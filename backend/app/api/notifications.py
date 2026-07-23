@@ -21,8 +21,8 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 @router.get("", response_model=NotificationListResponse)
 def list_notifications(
-    event_type: str | None = Query(default=None),
-    status: str | None = Query(default=None),
+    event_type: str | None = Query(default=None, max_length=80),
+    status: str | None = Query(default=None, max_length=40),
     acknowledged: bool | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
     db: Session = Depends(get_db),

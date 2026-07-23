@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.input_security import MAX_REVIEW_NOTE_CHARS
 
 
 class MergeCandidateRead(BaseModel):
@@ -56,19 +58,19 @@ class IntelligenceListResponse(BaseModel):
 
 
 class ReviewDecisionRequest(BaseModel):
-    notes: str | None = None
-    actor: str = "analyst"
+    notes: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)
+    actor: str = Field(default="analyst", min_length=1, max_length=120)
 
 
 class BatchReviewDecisionRequest(BaseModel):
-    item_ids: list[int]
-    notes: str | None = None
-    actor: str = "analyst"
+    item_ids: list[int] = Field(min_length=1, max_length=100)
+    notes: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)
+    actor: str = Field(default="analyst", min_length=1, max_length=120)
 
 
 class MergeDecisionRequest(BaseModel):
-    actor: str = "analyst"
-    notes: str | None = None
+    actor: str = Field(default="analyst", min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)
 
 
 class ReviewActionRead(BaseModel):

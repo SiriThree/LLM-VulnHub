@@ -28,11 +28,11 @@ router = APIRouter(prefix="/vulnerabilities", tags=["vulnerabilities"])
 
 @router.get("", response_model=VulnerabilityList)
 def list_api(
-    q: str | None = None,
-    severity: str | None = None,
-    vuln_type: str | None = None,
-    component: str | None = None,
-    status: str | None = None,
+    q: str | None = Query(default=None, max_length=300),
+    severity: str | None = Query(default=None, max_length=20),
+    vuln_type: str | None = Query(default=None, max_length=120),
+    component: str | None = Query(default=None, max_length=200),
+    status: str | None = Query(default=None, max_length=40),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),

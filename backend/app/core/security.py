@@ -25,6 +25,10 @@ def get_request_identity(
     settings = get_settings()
     role = (x_role or settings.default_role).strip().lower()
     actor = (x_actor or settings.default_actor).strip()
+    if not actor or len(actor) > 120:
+        raise HTTPException(400, "actor must contain 1 to 120 characters")
+    if len(role) > 20:
+        raise HTTPException(400, "role is too long")
     if role not in ROLE_ORDER:
         raise HTTPException(403, f"unsupported role: {role}")
     return RequestIdentity(actor=actor, role=role)

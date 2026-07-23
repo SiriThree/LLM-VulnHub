@@ -9,6 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
+from app.core.input_security import MAX_LONG_FIELD_CHARS, sanitize_plain_text
 from app.db.models import AgentExecution, AnalysisJob
 from app.schemas.vulnerability import VulnerabilityCreate
 from app.services.llm_service import LLMClient
@@ -57,7 +58,7 @@ def ensure_aware(value: datetime | None) -> datetime | None:
 
 
 def clean_text(text: str) -> str:
-    return " ".join((text or "").replace("\r", " ").replace("\n", " ").split())[:12000]
+    return sanitize_plain_text(text)
 
 
 def content_hash(text: str) -> str:
@@ -340,6 +341,21 @@ def missing_required_keys(payload: dict[str, Any], required_keys: tuple[str, ...
     return missing
 
 
+def sanitize_agent_output(value: Any, *, depth: int = 0) -> Any:
+    if depth > 6:
+        return None
+    if isinstance(value, str):
+        return sanitize_plain_text(value, max_chars=MAX_LONG_FIELD_CHARS)
+    if isinstance(value, list):
+        return [sanitize_agent_output(item, depth=depth + 1) for item in value[:100]]
+    if isinstance(value, dict):
+        return {
+            sanitize_plain_text(str(key), max_chars=100): sanitize_agent_output(item, depth=depth + 1)
+            for key, item in list(value.items())[:100]
+        }
+    return value
+
+
 async def run_json_agent(
     db: Session,
     state: VulnerabilityAnalysisState,
@@ -375,7 +391,9 @@ async def run_json_agent(
 
     for attempt in range(1, settings.agent_max_attempts + 1):
         try:
-            output = await client.chat_json(prompt_spec.system_prompt, user_prompt)
+            output = sanitize_agent_output(await client.chat_json(prompt_spec.system_prompt, user_prompt))
+            if not isinstance(output, dict):
+                raise ValueError("Agent output must be a JSON object")
             missing = missing_required_keys(output, prompt_spec.required_keys)
             if missing:
                 last_error = f"Missing required keys: {', '.join(missing)}"

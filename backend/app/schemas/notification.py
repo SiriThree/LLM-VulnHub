@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.core.input_security import MAX_REVIEW_NOTE_CHARS
 
 
 class NotificationEventRead(BaseModel):
@@ -31,11 +33,11 @@ class NotificationListResponse(BaseModel):
 
 
 class NotificationAcknowledgeRequest(BaseModel):
-    actor: str = "analyst"
-    note: str | None = None
+    actor: str = Field(default="analyst", min_length=1, max_length=120)
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)
 
 
 class NotificationBatchAcknowledgeRequest(BaseModel):
-    task_ids: list[int]
-    actor: str = "analyst"
-    note: str | None = None
+    task_ids: list[int] = Field(min_length=1, max_length=200)
+    actor: str = Field(default="analyst", min_length=1, max_length=120)
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_CHARS)
