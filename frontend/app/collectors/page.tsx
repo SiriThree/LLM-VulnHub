@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowRight, Play, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
+import { Activity, ArrowRight, Pencil, Play, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,6 +29,8 @@ type RunResponse = {
   message: string;
 };
 
+type SourceEditForm = Pick<DataSource, "name" | "source_type" | "url" | "enabled" | "interval_minutes">;
+
 const DEFAULT_SOURCE_FORM = {
   name: "OpenAI Security News",
   source_type: "web",
@@ -47,6 +49,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   rss: "RSS / Blog",
   web: "Web 页面",
   github: "GitHub Advisory",
+  local_file: "本地文件",
 };
 
 const SOURCE_STATUS_LABELS: Record<string, string> = {
@@ -77,6 +80,8 @@ export default function CollectorsPage() {
   const [sourcePage, setSourcePage] = useState(1);
   const [sourcePageSize, setSourcePageSize] = useState(10);
   const [sourceTotal, setSourceTotal] = useState(0);
+  const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<SourceEditForm | null>(null);
   const [form, setForm, { clearDraft: clearSourceDraft }] = useSessionDraft(
     "llm-vulnhub:collector-source-draft:v1",
     DEFAULT_SOURCE_FORM,
@@ -145,6 +150,10 @@ export default function CollectorsPage() {
     setMessage("");
     try {
       await api(`/sources/${source.id}`, { method: "DELETE" });
+      if (editingSourceId === source.id) {
+        setEditingSourceId(null);
+        setEditForm(null);
+      }
       setMessage(`数据源“${source.name}”已删除，历史采集记录仍保留。`);
       if (sources.length === 1 && sourcePage > 1) {
         setSourcePage((current) => current - 1);
@@ -153,6 +162,42 @@ export default function CollectorsPage() {
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "删除数据源失败。");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEditingSource(source: DataSource) {
+    setMessage("");
+    setEditingSourceId(source.id);
+    setEditForm({
+      name: source.name,
+      source_type: source.source_type,
+      url: source.url,
+      enabled: source.enabled,
+      interval_minutes: source.interval_minutes,
+    });
+  }
+
+  function cancelEditingSource() {
+    setEditingSourceId(null);
+    setEditForm(null);
+  }
+
+  async function saveSource() {
+    if (!canManageSources || editingSourceId === null || !editForm) return;
+    setSubmitting(true);
+    setMessage("");
+    try {
+      const updated = await api<DataSource>(`/sources/${editingSourceId}`, {
+        method: "PUT",
+        body: JSON.stringify(editForm),
+      });
+      setMessage(`采集源“${updated.name}”已更新。`);
+      cancelEditingSource();
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "更新采集源失败。");
     } finally {
       setSubmitting(false);
     }
@@ -239,6 +284,7 @@ export default function CollectorsPage() {
               <option value="rss">rss</option>
               <option value="web">web</option>
               <option value="github">github</option>
+              <option value="local_file">local_file</option>
             </select>
             <Input
               className="md:col-span-2"
@@ -313,6 +359,83 @@ export default function CollectorsPage() {
           </div>
         </div>
 
+        {editingSourceId !== null && editForm ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+            <div>
+              <h3 className="font-semibold text-slate-900">编辑采集源 #{editingSourceId}</h3>
+              <p className="mt-1 text-sm text-slate-500">修改后会在下次调度或手动采集时生效。</p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <label className="space-y-1 xl:col-span-2">
+                <span className="text-xs text-slate-500">来源名称</span>
+                <Input
+                  maxLength={160}
+                  value={editForm.name}
+                  onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">来源类型</span>
+                <select
+                  className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
+                  value={editForm.source_type}
+                  onChange={(event) => setEditForm({ ...editForm, source_type: event.target.value })}
+                >
+                  <option value="rss">rss</option>
+                  <option value="web">web</option>
+                  <option value="github">github</option>
+                  <option value="local_file">local_file</option>
+                </select>
+              </label>
+              <label className="space-y-1 xl:col-span-2">
+                <span className="text-xs text-slate-500">URL / 文件路径</span>
+                <Input
+                  maxLength={800}
+                  value={editForm.url}
+                  onChange={(event) => setEditForm({ ...editForm, url: event.target.value })}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">采集周期（分钟）</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10080}
+                  value={editForm.interval_minutes}
+                  onChange={(event) => setEditForm({ ...editForm, interval_minutes: Number(event.target.value) })}
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editForm.enabled}
+                  onChange={(event) => setEditForm({ ...editForm, enabled: event.target.checked })}
+                />
+                启用该采集源
+              </label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="border border-border bg-white text-slate-700"
+                  disabled={submitting}
+                  onClick={cancelEditingSource}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  disabled={submitting || !editForm.name.trim() || !editForm.url.trim() || editForm.interval_minutes < 1}
+                  onClick={saveSource}
+                >
+                  保存修改
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sources.map((source) => {
             const health = sourceHealth.find((item) => item.source_id === source.id);
@@ -376,15 +499,26 @@ export default function CollectorsPage() {
                     立即采集
                   </Button>
                   {canManageSources ? (
-                    <Button
-                      type="button"
-                      className="h-8 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
-                      disabled={submitting}
-                      onClick={() => deleteSource(source)}
-                    >
-                      <Trash2 size={14} />
-                      删除来源
-                    </Button>
+                    <>
+                      <Button
+                        type="button"
+                        className="h-8 border border-border bg-white text-slate-700"
+                        disabled={submitting}
+                        onClick={() => startEditingSource(source)}
+                      >
+                        <Pencil size={14} />
+                        编辑
+                      </Button>
+                      <Button
+                        type="button"
+                        className="h-8 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                        disabled={submitting}
+                        onClick={() => deleteSource(source)}
+                      >
+                        <Trash2 size={14} />
+                        删除来源
+                      </Button>
+                    </>
                   ) : null}
                 </div>
               </div>
