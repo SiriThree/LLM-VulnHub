@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import { api, NotificationEvent, NotificationListResponse } from "@/lib/api";
 
 const EVENT_LABELS: Record<string, string> = {
@@ -141,24 +142,7 @@ export default function NotificationsPage() {
 
       <div className="text-sm text-slate-500">当前已选择 {selectedIds.length} 条通知</div>
 
-      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4 text-sm">
-        <span className="text-slate-500">共 {total} 条通知</span>
-        <label className="flex items-center gap-2 text-slate-500">
-          每页
-          <select
-            className="h-9 rounded-md border border-border bg-white px-2 text-slate-700"
-            value={pageSize}
-            onChange={(event) => {
-              setPage(1);
-              setPageSize(Number(event.target.value));
-            }}
-          >
-            {[5, 10, 20, 50].map((value) => <option key={value} value={value}>{value} 条</option>)}
-          </select>
-        </label>
-      </div>
-
-      <div className="space-y-3">
+      <div className="space-y-3" style={{ minHeight: `${pageSize * 220}px` }}>
         {items.length > 0 ? (
           items.map((item) => {
             const severityStyle = SEVERITY_STYLES[item.severity] ?? "bg-slate-100 text-slate-700";
@@ -216,22 +200,17 @@ export default function NotificationsPage() {
           <Card><div className="text-sm text-slate-500">当前筛选条件下没有通知事件。</div></Card>
         )}
       </div>
-      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4 text-sm">
-        <span className="text-slate-500">第 {page} / {Math.max(1, Math.ceil(total / pageSize))} 页</span>
-        <div className="flex gap-2">
-          <Button type="button" className="border border-border bg-white text-slate-700" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
-            上一页
-          </Button>
-          <Button
-            type="button"
-            className="border border-border bg-white text-slate-700"
-            disabled={page >= Math.max(1, Math.ceil(total / pageSize))}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            下一页
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        className="rounded-lg border border-border bg-white px-4 pb-3 shadow-soft"
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => {
+          setPage(1);
+          setPageSize(value);
+        }}
+      />
     </div>
   );
 }

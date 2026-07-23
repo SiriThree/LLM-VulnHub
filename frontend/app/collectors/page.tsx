@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import {
   api,
   AuthSession,
@@ -68,56 +69,6 @@ function TrustBadge({ source }: { source: SourceHealth }) {
         : "bg-slate-100 text-slate-700";
 
   return <span className={`rounded px-2 py-1 text-xs font-medium ${tone}`}>可信度 {source.trust_score}</span>;
-}
-
-function ListPager({
-  total,
-  page,
-  pageSize,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  total: number;
-  page: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (pageSize: number) => void;
-}) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-sm">
-      <span className="text-slate-500">共 {total} 条 · 第 {page} / {pageCount} 页</span>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-slate-500">
-          每页
-          <select
-            className="h-8 rounded-md border border-border bg-white px-2 text-slate-700"
-            value={pageSize}
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
-          >
-            <option value={5}>5 条</option>
-            <option value={10}>10 条</option>
-          </select>
-        </label>
-        <Button
-          type="button"
-          className="h-8 border border-border bg-white text-slate-700"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-        >
-          上一页
-        </Button>
-        <Button
-          type="button"
-          className="h-8 border border-border bg-white text-slate-700"
-          disabled={page >= pageCount}
-          onClick={() => onPageChange(page + 1)}
-        >
-          下一页
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 export default function CollectorsPage() {
@@ -370,7 +321,7 @@ export default function CollectorsPage() {
           </div>
         </Card>
 
-        <Card className="space-y-4">
+        <Card className="flex h-full flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">实时流水线状态</h2>
@@ -400,7 +351,7 @@ export default function CollectorsPage() {
         </Card>
       </div>
 
-      <Card className="space-y-4">
+      <Card className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold">采集源</h2>
@@ -409,19 +360,6 @@ export default function CollectorsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-slate-500">
-              每页
-              <select
-                className="h-9 rounded-md border border-border bg-white px-2 text-slate-700"
-                value={sourcePageSize}
-                onChange={(event) => {
-                  setSourcePage(1);
-                  setSourcePageSize(Number(event.target.value));
-                }}
-              >
-                {[5, 10, 20, 50].map((value) => <option key={value} value={value}>{value} 条</option>)}
-              </select>
-            </label>
             <Button onClick={() => run()} disabled={submitting}>
               <Play size={16} />
               采集全部启用源
@@ -596,33 +534,20 @@ export default function CollectorsPage() {
           })}
         </div>
         {sources.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有采集源。</div> : null}
-        <div className="flex items-center justify-between border-t border-border pt-4 text-sm">
-          <span className="text-slate-500">
-            第 {sourcePage} / {Math.max(1, Math.ceil(sourceTotal / sourcePageSize))} 页
-          </span>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              className="border border-border bg-white text-slate-700"
-              disabled={sourcePage <= 1}
-              onClick={() => setSourcePage((current) => Math.max(1, current - 1))}
-            >
-              上一页
-            </Button>
-            <Button
-              type="button"
-              className="border border-border bg-white text-slate-700"
-              disabled={sourcePage >= Math.max(1, Math.ceil(sourceTotal / sourcePageSize))}
-              onClick={() => setSourcePage((current) => current + 1)}
-            >
-              下一页
-            </Button>
-          </div>
-        </div>
+        <Pagination
+          total={sourceTotal}
+          page={sourcePage}
+          pageSize={sourcePageSize}
+          onPageChange={setSourcePage}
+          onPageSizeChange={(value) => {
+            setSourcePage(1);
+            setSourcePageSize(value);
+          }}
+        />
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <Card className="space-y-4">
+        <Card className="flex h-full flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">待处理队列</h2>
@@ -633,7 +558,7 @@ export default function CollectorsPage() {
             </Link>
           </div>
 
-          <div className="space-y-3">
+          <div className="flex-1 space-y-3">
             {pendingDocs.map((doc: CollectedDocument) => (
               <div key={doc.id} className="rounded-md border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -664,11 +589,15 @@ export default function CollectorsPage() {
               </div>
             ))}
             {pendingDocs.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有待处理文档。</div> : null}
+            {Array.from({ length: Math.max(0, pendingPageSize - pendingDocs.length) }).map((_, index) => (
+              <div aria-hidden="true" className="invisible min-h-[74px] rounded-md border p-3" key={`pending-placeholder-${index}`} />
+            ))}
           </div>
-          <ListPager
+          <Pagination
             total={overview?.pending_documents_total ?? 0}
             page={pendingPage}
             pageSize={pendingPageSize}
+            pageSizeOptions={[5, 10]}
             onPageChange={setPendingPage}
             onPageSizeChange={(value) => {
               setPendingPage(1);
@@ -677,12 +606,12 @@ export default function CollectorsPage() {
           />
         </Card>
 
-        <Card className="space-y-4">
+        <Card className="flex h-full flex-col gap-4">
           <div>
             <h2 className="font-semibold">最近采集结果</h2>
             <p className="mt-1 text-sm text-slate-500">展示最新进入系统的候选文本，可快速跳转到分析或复核环节。</p>
           </div>
-          <div className="space-y-3">
+          <div className="flex-1 space-y-3">
             {recentDocs.map((doc: CollectedDocument) => (
               <div key={doc.id} className="rounded-md border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -697,11 +626,15 @@ export default function CollectorsPage() {
               </div>
             ))}
             {recentDocs.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有采集结果。</div> : null}
+            {Array.from({ length: Math.max(0, recentPageSize - recentDocs.length) }).map((_, index) => (
+              <div aria-hidden="true" className="invisible min-h-[74px] rounded-md border p-3" key={`recent-placeholder-${index}`} />
+            ))}
           </div>
-          <ListPager
+          <Pagination
             total={overview?.recent_documents_total ?? 0}
             page={recentPage}
             pageSize={recentPageSize}
+            pageSizeOptions={[5, 10]}
             onPageChange={setRecentPage}
             onPageSizeChange={(value) => {
               setRecentPage(1);
@@ -711,14 +644,14 @@ export default function CollectorsPage() {
         </Card>
       </div>
 
-      <Card className="space-y-4">
+      <Card className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Activity size={16} />
           <h2 className="font-semibold">最近运行轨迹</h2>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid flex-1 auto-rows-fr gap-3 md:grid-cols-2 xl:grid-cols-3">
           {recentRuns.map((run) => (
-            <div key={`${run.task_id}-${run.source_id}-${run.source_name}`} className="rounded-md border border-border p-3">
+            <div key={`${run.task_id}-${run.source_id}-${run.source_name}`} className="flex min-h-44 flex-col rounded-md border border-border p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-medium">{run.source_name}</div>
@@ -758,11 +691,15 @@ export default function CollectorsPage() {
             </div>
           ))}
           {recentRuns.length === 0 ? <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">当前没有运行轨迹。</div> : null}
+          {Array.from({ length: Math.max(0, runsPageSize - recentRuns.length) }).map((_, index) => (
+            <div aria-hidden="true" className="invisible min-h-44 rounded-md border p-3" key={`run-placeholder-${index}`} />
+          ))}
         </div>
-        <ListPager
+        <Pagination
           total={overview?.recent_runs_total ?? 0}
           page={runsPage}
           pageSize={runsPageSize}
+          pageSizeOptions={[5, 10]}
           onPageChange={setRunsPage}
           onPageSizeChange={(value) => {
             setRunsPage(1);

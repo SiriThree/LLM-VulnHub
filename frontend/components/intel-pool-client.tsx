@@ -7,6 +7,7 @@ import { Check, GitMerge, RefreshCcw, RotateCcw, ShieldCheck, X } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import {
   api,
   IntelligenceItem,
@@ -155,7 +156,6 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
   const canBatchReview = selectedItems.length > 0 && selectedItems.every((item) => PUBLISHABLE_STATUSES.has(item.status));
   const canBatchUndo = selectedItems.length > 0 && selectedItems.every((item) => !PUBLISHABLE_STATUSES.has(item.status));
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   useEffect(() => {
     if (!selected) {
@@ -382,19 +382,6 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            <label className="flex items-center gap-2 text-sm text-slate-500">
-              每页
-              <select
-                className="h-10 rounded-md border border-border bg-white px-2 text-sm text-slate-700"
-                value={pageSize}
-                onChange={(event) => {
-                  setPage(1);
-                  setPageSize(Number(event.target.value));
-                }}
-              >
-                {PAGE_SIZE_OPTIONS.map((value) => <option key={value} value={value}>{value} 条</option>)}
-              </select>
-            </label>
             <div className="text-sm text-slate-500">共 {total} 条</div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <span className="text-sm text-slate-500">已选择 {selectedIds.length} 条</span>
@@ -439,7 +426,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card className="p-0">
+        <Card className="flex h-full flex-col p-0">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="font-semibold">情报列表</div>
             <label className="flex items-center gap-2 text-xs text-slate-500">
@@ -447,7 +434,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               全选
             </label>
           </div>
-          <div>
+          <div className="flex-1" style={{ minHeight: `${pageSize * 72}px` }}>
             {items.length > 0 ? items.map((item) => (
               <div
                 key={item.id}
@@ -474,27 +461,18 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-sm">
-            <span className="text-slate-500">第 {page} / {pageCount} 页</span>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                className="border border-border bg-white text-slate-700"
-                disabled={page <= 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                上一页
-              </Button>
-              <Button
-                type="button"
-                className="border border-border bg-white text-slate-700"
-                disabled={page >= pageCount}
-                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-              >
-                下一页
-              </Button>
-            </div>
-          </div>
+          <Pagination
+            className="px-4 pb-3"
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setPage(1);
+              setPageSize(value);
+            }}
+          />
         </Card>
 
         <Card>

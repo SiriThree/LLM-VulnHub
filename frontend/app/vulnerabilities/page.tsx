@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { GuestNotice } from "@/components/guest-notice";
 import { PageHero } from "@/components/page-hero";
+import { Pagination } from "@/components/pagination";
 import { api, AuthSession, Vulnerability } from "@/lib/api";
 import { formatVulnerabilityStatus } from "@/lib/presentation";
 
@@ -32,16 +33,7 @@ export default async function VulnerabilitiesPage({
   const role = session.role ?? "guest";
   const isGuest = role === "guest";
   const canOperate = role === "analyst" || role === "admin";
-  const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
-  const pageNumbers = Array.from(
-    new Set([1, data.page - 1, data.page, data.page + 1, totalPages].filter((page) => page >= 1 && page <= totalPages)),
-  ).sort((a, b) => a - b);
-
-  function pageHref(page: number) {
-    const next = new URLSearchParams(query);
-    next.set("page", String(page));
-    return `/vulnerabilities?${next.toString()}`;
-  }
+  const paginationQuery = Object.fromEntries(query.entries());
 
   const activeFilters = [
     sp.q ? `关键词: ${sp.q}` : null,
@@ -73,7 +65,7 @@ export default async function VulnerabilitiesPage({
       />
 
       <form className="rounded-lg border border-border bg-white p-4 shadow-soft">
-        <div className="grid gap-3 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto_auto]">
+        <div className="grid gap-3 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
           <div className="flex items-center gap-2 rounded-md border border-border px-3">
             <Search size={16} />
             <input name="q" defaultValue={sp.q ?? ""} className="h-10 flex-1 bg-transparent text-sm outline-none" placeholder="搜索标题、描述、影响组件" />
@@ -88,9 +80,6 @@ export default async function VulnerabilitiesPage({
           <input name="vuln_type" defaultValue={sp.vuln_type ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="漏洞类型" />
           <input name="component" defaultValue={sp.component ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="影响组件" />
           <input name="status" defaultValue={sp.status ?? ""} className="h-10 rounded-md border border-border px-3 text-sm outline-none" placeholder="状态" />
-          <select name="page_size" defaultValue={String(pageSize)} className="h-10 rounded-md border border-border bg-white px-3 text-sm">
-            {[5, 10, 20, 50].map((value) => <option key={value} value={value}>每页 {value} 条</option>)}
-          </select>
           <button className="inline-flex h-10 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white">筛选</button>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -122,7 +111,7 @@ export default async function VulnerabilitiesPage({
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" style={{ minHeight: `${data.page_size * 64 + 48}px` }}>
           <table className="w-full min-w-[1240px] table-fixed border-collapse text-sm">
             <colgroup>
               <col className="w-[290px]" />
@@ -176,42 +165,14 @@ export default async function VulnerabilitiesPage({
           </table>
         </div>
       </Card>
-      <div className="flex flex-col gap-3 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
-        <div>
-          共 {data.total} 条漏洞记录，第 {data.page} / {totalPages} 页
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            className={`inline-flex h-9 items-center whitespace-nowrap rounded-md border border-border px-3 ${
-              data.page <= 1 ? "pointer-events-none opacity-50" : "bg-white hover:bg-slate-50"
-            }`}
-            href={pageHref(Math.max(1, data.page - 1))}
-          >
-            上一页
-          </Link>
-          {pageNumbers.map((page, index) => (
-            <span key={page} className="flex items-center gap-2">
-              {index > 0 && page - pageNumbers[index - 1] > 1 ? <span className="text-slate-400">...</span> : null}
-              <Link
-                className={`inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-border px-3 ${
-                  page === data.page ? "bg-slate-900 text-white" : "bg-white hover:bg-slate-50"
-                }`}
-                href={pageHref(page)}
-              >
-                {page}
-              </Link>
-            </span>
-          ))}
-          <Link
-            className={`inline-flex h-9 items-center whitespace-nowrap rounded-md border border-border px-3 ${
-              data.page >= totalPages ? "pointer-events-none opacity-50" : "bg-white hover:bg-slate-50"
-            }`}
-            href={pageHref(Math.min(totalPages, data.page + 1))}
-          >
-            下一页
-          </Link>
-        </div>
-      </div>
+      <Pagination
+        className="rounded-lg border border-border bg-white px-4 pb-3 shadow-soft"
+        total={data.total}
+        page={data.page}
+        pageSize={data.page_size}
+        basePath="/vulnerabilities"
+        query={paginationQuery}
+      />
     </div>
   );
 }
