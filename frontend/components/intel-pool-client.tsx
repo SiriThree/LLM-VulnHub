@@ -16,6 +16,7 @@ import {
   ReviewActionListResponse,
   ReviewStats,
 } from "@/lib/api";
+import { useSessionDraft } from "@/lib/use-session-draft";
 
 const STATUS_OPTIONS = [
   { value: "reviewable", label: "待审核队列" },
@@ -67,6 +68,10 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [notes, setNotes] = useState("");
+  const [noteDrafts, setNoteDrafts] = useSessionDraft<Record<string, string>>(
+    "llm-vulnhub:intelligence-review-note-drafts:v1",
+    {},
+  );
   const [actions, setActions] = useState<ReviewAction[]>([]);
   const [globalActions, setGlobalActions] = useState<ReviewAction[]>([]);
   const [stats, setStats] = useState<IntelligenceStats | null>(null);
@@ -135,8 +140,27 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   const canApproveSelected = selected ? PUBLISHABLE_STATUSES.has(selected.status) : false;
 
   useEffect(() => {
-    setNotes(selected?.review_notes ?? "");
-  }, [selected?.id]);
+    if (!selected) {
+      setNotes("");
+      return;
+    }
+    const key = String(selected.id);
+    setNotes(Object.prototype.hasOwnProperty.call(noteDrafts, key) ? noteDrafts[key] : selected.review_notes ?? "");
+  }, [noteDrafts, selected]);
+
+  function updateNotes(value: string) {
+    setNotes(value);
+    if (!selected) return;
+    setNoteDrafts((current) => ({ ...current, [String(selected.id)]: value }));
+  }
+
+  function clearNoteDrafts(itemIds: number[]) {
+    setNoteDrafts((current) => {
+      const next = { ...current };
+      itemIds.forEach((itemId) => delete next[String(itemId)]);
+      return next;
+    });
+  }
 
   function toggleSelection(itemId: number) {
     setSelectedIds((current) => (current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]));
@@ -165,6 +189,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         method: "POST",
         body: JSON.stringify({ actor: "analyst", notes }),
       });
+      clearNoteDrafts([selected.id]);
       setMessage(
         updated.vulnerability_id
           ? `情报 #${selected.id} 已发布到漏洞库，并关联漏洞 #${updated.vulnerability_id}。`
@@ -190,6 +215,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         method: "POST",
         body: JSON.stringify({ actor: "analyst", notes }),
       });
+      clearNoteDrafts([selected.id]);
       setMessage(`情报 #${updated.id} 已驳回。`);
       await load(updated.id);
       await loadActions(updated.id);
@@ -212,6 +238,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         method: "POST",
         body: JSON.stringify({ actor: "analyst", notes, item_ids: selectedIds }),
       });
+      clearNoteDrafts(selectedIds);
       setMessage(action === "approve" ? `已批量通过 ${res.items.length} 条情报。` : `已批量驳回 ${res.items.length} 条情报。`);
       setSelectedIds([]);
       await load(selectedId);
@@ -232,6 +259,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         method: "POST",
         body: JSON.stringify({ actor: "analyst", notes }),
       });
+      clearNoteDrafts([selected.id]);
       setMessage(`合并候选 #${candidateId} 已通过。`);
       await load(selected.id);
       await loadActions(selected.id);
@@ -487,7 +515,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                 <textarea
                   className="min-h-24 w-full rounded-md border border-border bg-white p-3 text-sm outline-none"
                   value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
+                  onChange={(event) => updateNotes(event.target.value)}
                   placeholder="记录审核判断、合并理由、需要补充的信息。"
                 />
               </div>

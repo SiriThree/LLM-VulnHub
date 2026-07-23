@@ -15,6 +15,7 @@ import {
   EvalRunDetail,
   Vulnerability,
 } from "@/lib/api";
+import { useSessionDraft } from "@/lib/use-session-draft";
 
 const SAMPLE_TEXTS = [
   {
@@ -101,11 +102,26 @@ function buildPayload(result: EditableExtract): Omit<Vulnerability, "id" | "crea
 
 export function AiExtractClient() {
   const [mode, setMode] = useState<"workspace" | "quality">("workspace");
-  const [raw, setRaw] = useState(SAMPLE_TEXTS[0].value);
-  const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
-  const [originalResult, setOriginalResult] = useState<EditableExtract | null>(null);
-  const [result, setResult] = useState<EditableExtract | null>(null);
-  const [reviewNote, setReviewNote] = useState("");
+  const [raw, setRaw, { discardDraft: discardRawDraft }] = useSessionDraft(
+    "llm-vulnhub:ai-extract-raw-draft:v1",
+    SAMPLE_TEXTS[0].value,
+  );
+  const [analysis, setAnalysis, { discardDraft: discardAnalysisDraft }] = useSessionDraft<AnalyzeResult | null>(
+    "llm-vulnhub:ai-extract-analysis-draft:v1",
+    null,
+  );
+  const [originalResult, setOriginalResult, { discardDraft: discardOriginalResultDraft }] = useSessionDraft<EditableExtract | null>(
+    "llm-vulnhub:ai-extract-original-draft:v1",
+    null,
+  );
+  const [result, setResult, { discardDraft: discardResultDraft }] = useSessionDraft<EditableExtract | null>(
+    "llm-vulnhub:ai-extract-result-draft:v1",
+    null,
+  );
+  const [reviewNote, setReviewNote, { discardDraft: discardReviewNoteDraft }] = useSessionDraft(
+    "llm-vulnhub:ai-extract-review-note-draft:v1",
+    "",
+  );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -178,6 +194,11 @@ export function AiExtractClient() {
       });
       setMessage(`已确认入库：#${confirmed.vulnerability.id} ${confirmed.vulnerability.title}`);
       setResult(confirmed.vulnerability);
+      discardRawDraft();
+      discardAnalysisDraft();
+      discardOriginalResultDraft();
+      discardResultDraft(true);
+      discardReviewNoteDraft();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "确认入库失败。");
     } finally {
