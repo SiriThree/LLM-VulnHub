@@ -148,8 +148,7 @@ export default function TasksPage() {
     <div className="space-y-5">
       <PageHero
         title="任务中心"
-        description="统一观察采集入池、分析、复核和通知四段异步流水线。"
-        eyebrow={`当前活跃任务 ${activeCount}`}
+        description="查看采集、分析、复核和通知任务的执行状态。"
         actions={<Button type="button" className="border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={load} disabled={loading}>
             <RefreshCw size={16} />
             刷新
@@ -177,7 +176,7 @@ export default function TasksPage() {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">异常与死信处理</h2>
+            <h2 className="text-lg font-semibold">失败与死信任务</h2>
             <p className="text-sm text-slate-500">失败任务可直接重试或转入死信队列；死信任务在排障后可重新入队。</p>
           </div>
           <div className="text-sm text-slate-500">异常 {failedTasks.length} · 死信 {deadLetters.length}</div>
@@ -308,7 +307,7 @@ export default function TasksPage() {
                   创建时间 {new Date(task.created_at).toLocaleString()} · 更新时间 {new Date(task.updated_at).toLocaleString()}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
-                  执行模式 {task.output_data.execution_mode ?? "pending"} · 尝试次数 {task.output_data.attempt_count ?? 0}/{task.output_data.max_attempts ?? 0}
+                  运行方式 {task.output_data.execution_mode ?? "pending"} · 尝试次数 {task.output_data.attempt_count ?? 0}/{task.output_data.max_attempts ?? 0}
                   {task.output_data.elapsed_seconds != null ? ` · 耗时 ${task.output_data.elapsed_seconds}s` : ""}
                 </p>
               </div>
@@ -324,7 +323,7 @@ export default function TasksPage() {
 
             <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-md border border-border">
-                <div className="border-b border-border px-4 py-3 text-sm font-semibold">阶段轨迹</div>
+                <div className="border-b border-border px-4 py-3 text-sm font-semibold">执行记录</div>
                 <div className="max-h-72 space-y-3 overflow-auto p-4">
                   {(task.output_data.stage_history ?? []).map((item, index) => (
                     <div key={`${item.timestamp}-${index}`} className="rounded-md bg-slate-50 p-3">
@@ -339,7 +338,7 @@ export default function TasksPage() {
               </div>
 
               <div className="rounded-md border border-border">
-                <div className="border-b border-border px-4 py-3 text-sm font-semibold">来源执行明细</div>
+                <div className="border-b border-border px-4 py-3 text-sm font-semibold">数据源执行明细</div>
                 <div className="max-h-72 space-y-3 overflow-auto p-4">
                   {(task.output_data.source_runs ?? []).map((run) => (
                     <div key={run.source_id} className="rounded-md bg-slate-50 p-3">

@@ -10,26 +10,98 @@
 
 ```mermaid
 flowchart LR
-    analyst[安全分析人员] -->|浏览器访问| web[Next.js 前端]
-    web -->|REST / JSON| api[FastAPI API]
+    User["用户<br/>访客 / Viewer / Analyst / Admin"]
 
-    subgraph app[LLM-VulnHub 应用域]
-        api --> services[采集 / 情报 / 漏洞 / RAG 服务]
-        services --> db[(PostgreSQL + pgvector)]
-        api --> redis[(Redis)]
-        beat[Celery Beat] --> redis
-        redis --> worker[Celery Worker]
-        worker --> services
+    subgraph U["不可信输入域"]
+        Sources["外部情报源<br/>GitHub Advisory / RSS / 厂商公告"]
+        Query["用户查询与输入"]
     end
 
-    sources[GitHub Advisory / RSS / 厂商公告] -->|不可信外部内容| services
-    services -->|提示与上下文| llm[OpenAI / DeepSeek / Mock]
-    llm -->|模型输出| services
-    services -->|文本向量化| embedding[FastEmbed 本地模型]
+    subgraph A["应用受控域"]
+        Frontend["Next.js Web 前端<br/>看板 / 情报审核 / 漏洞维护 / RAG"]
+        API["FastAPI 服务<br/>认证 / RBAC / CSRF / 参数校验"]
 
-    classDef boundary fill:#f8fafc,stroke:#64748b,stroke-dasharray:5 5;
-    class app boundary;
+        subgraph S["领域服务"]
+            Collector["采集服务<br/>SSRF 防护 / HTML 清洗 / 限长"]
+            Intel["情报服务<br/>去重 / 合并 / 人工审核"]
+            Analysis["分析服务<br/>相关性判断 / 字段抽取 / Schema 校验"]
+            Vuln["漏洞服务<br/>标准化入库 / 可见级别"]
+            RAG["RAG 服务<br/>权限过滤 / 语义检索 / 引用校验"]
+            Notify["通知服务<br/>异常与审核提醒"]
+        end
+
+        subgraph T["异步任务层"]
+            Beat["Celery Beat<br/>定时调度"]
+            Redis["Redis<br/>任务队列 / 会话"]
+            Worker["Celery Worker<br/>采集 / 分析 / 通知"]
+        end
+
+        subgraph D["数据与模型层"]
+            DB[("PostgreSQL<br/>情报 / 漏洞 / 审计 / 任务")]
+            Vector[("pgvector<br/>语义向量索引")]
+            Embed["FastEmbed<br/>文本向量化"]
+        end
+    end
+
+    subgraph P["第三方处理域"]
+        LLM["模型服务<br/>OpenAI / DeepSeek / Mock"]
+    end
+
+    User --> Query
+    User -->|"HTTPS"| Frontend
+    Query --> Frontend
+    Frontend -->|"REST / JSON<br/>HttpOnly Cookie + CSRF"| API
+
+    API --> Collector
+    API --> Intel
+    API --> Analysis
+    API --> Vuln
+    API --> RAG
+    API --> Notify
+
+    Sources -->|"不可信正文"| Collector
+    Collector -->|"清洗和标准化"| Intel
+    Intel -->|"待审核情报"| Analysis
+    Analysis -->|"结构化结果"| Intel
+    Intel -->|"人工确认"| Vuln
+    Vuln --> DB
+
+    Beat -->|"定时任务"| Redis
+    API -->|"投递任务"| Redis
+    Redis --> Worker
+    Worker --> Collector
+    Worker --> Analysis
+    Worker --> Notify
+
+    Collector --> DB
+    Intel --> DB
+    Analysis --> DB
+    Notify --> DB
+
+    Vuln --> Embed
+    Embed --> Vector
+    Vector --> DB
+
+    RAG -->|"先按角色和可见级别过滤"| Vector
+    Vector -->|"授权范围内证据"| RAG
+    RAG -->|"脱敏后的提示与上下文"| LLM
+    Analysis -->|"脱敏后的不可信文本"| LLM
+    LLM -->|"不可信模型输出"| Analysis
+    LLM -->|"回答草稿"| RAG
+    RAG -->|"带引用的回答"| API
+
+    classDef untrusted fill:#fff1f2,stroke:#e11d48,color:#881337;
+    classDef controlled fill:#eff6ff,stroke:#2563eb,color:#1e3a8a;
+    classDef data fill:#ecfdf5,stroke:#059669,color:#064e3b;
+    classDef thirdparty fill:#fff7ed,stroke:#ea580c,color:#7c2d12;
+
+    class Sources,Query untrusted;
+    class Frontend,API,Collector,Intel,Analysis,Vuln,RAG,Notify,Beat,Redis,Worker controlled;
+    class DB,Vector,Embed data;
+    class LLM thirdparty;
 ```
+
+图中红色节点表示不可信外部输入，蓝色节点表示应用受控域，绿色节点表示数据与本地模型层，橙色节点表示第三方模型处理域。外部正文、用户输入和模型输出均按不可信数据处理；只有经过清洗、结构化校验和人工复核的情报才能进入正式漏洞库及 RAG 索引。
 
 主要职责：
 

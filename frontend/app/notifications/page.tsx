@@ -107,8 +107,7 @@ export default function NotificationsPage() {
     <div className="space-y-5">
       <PageHero
         title="通知中心"
-        description="集中查看高风险待复核事件、采集源异常和异步流水线产出的关键通知。"
-        eyebrow="事件提醒与确认"
+        description="查看待复核、采集失败和任务异常通知。"
       />
 
       <div className="grid gap-4 md:grid-cols-4">

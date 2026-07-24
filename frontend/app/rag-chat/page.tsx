@@ -93,16 +93,16 @@ export default function RagChatPage() {
               <ShieldCheck size={14} /> 回答范围限定于已入库漏洞
             </div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">漏洞知识检索</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-300">从漏洞库检索相关证据，整理回答并保留可核验的记录来源。</p>
+            <p className="mt-2 text-sm leading-6 text-slate-300">根据漏洞库记录回答问题，并列出参考来源。</p>
           </div>
           <div className="flex gap-6 text-sm">
             <div>
               <div className="text-2xl font-semibold">{refs.length || "-"}</div>
-              <div className="mt-1 text-xs text-slate-400">召回片段</div>
+              <div className="mt-1 text-xs text-slate-400">匹配片段</div>
             </div>
             <div>
               <div className="text-2xl font-semibold">{topSimilarity ? `${topSimilarity}%` : "-"}</div>
-              <div className="mt-1 text-xs text-slate-400">最高相关度</div>
+              <div className="mt-1 text-xs text-slate-400">最高匹配度</div>
             </div>
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function RagChatPage() {
               />
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <label htmlFor="top-k">召回数量</label>
+                  <label htmlFor="top-k">参考记录数</label>
                   <select
                     className="h-9 rounded-md border border-border bg-white px-2 text-sm text-slate-700 outline-none focus:border-primary"
                     id="top-k"
@@ -154,7 +154,7 @@ export default function RagChatPage() {
             </form>
 
             <div className="mt-5 border-t border-slate-100 pt-4">
-              <div className="mb-2 text-xs font-medium text-slate-400">试试这些问题</div>
+              <div className="mb-2 text-xs font-medium text-slate-400">示例问题</div>
               <div className="flex flex-wrap gap-2">
                 {EXAMPLE_QUESTIONS.map((example) => (
                   <button
@@ -177,7 +177,7 @@ export default function RagChatPage() {
             <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
               <AlertCircle className="mt-0.5 shrink-0" size={17} />
               <div>
-                <div className="font-medium">问答请求失败</div>
+                <div className="font-medium">查询失败</div>
                 <div className="mt-1 break-words text-rose-700">{error}</div>
               </div>
             </div>
@@ -187,7 +187,7 @@ export default function RagChatPage() {
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div className="flex items-center gap-2">
                 <ShieldCheck size={17} className="text-primary" />
-                <h2 className="font-semibold">分析结果</h2>
+                <h2 className="font-semibold">回答</h2>
               </div>
               {answer ? (
                 <button
@@ -233,7 +233,7 @@ export default function RagChatPage() {
                 </div>
                 {uniqueRefs.length > 0 ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">{uniqueRefs.length} 条记录</span> : null}
               </div>
-              <p className="mt-1 text-xs text-slate-400">按综合相关性从高到低排列</p>
+              <p className="mt-1 text-xs text-slate-400">按匹配度从高到低排列</p>
             </div>
             <div className="max-h-[calc(100vh-12rem)] space-y-3 overflow-y-auto p-3">
               {loading ? (
@@ -274,7 +274,7 @@ export default function RagChatPage() {
               ) : (
                 <div className="flex min-h-52 flex-col items-center justify-center px-5 text-center">
                   <Search size={22} className="text-slate-300" />
-                  <div className="mt-3 text-sm font-medium text-slate-600">暂无召回记录</div>
+                  <div className="mt-3 text-sm font-medium text-slate-600">未找到相关记录</div>
                   <p className="mt-1 text-xs leading-5 text-slate-400">提交问题后，相关漏洞与证据片段会显示在这里。</p>
                 </div>
               )}

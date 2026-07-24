@@ -274,8 +274,8 @@ export function AiExtractClient() {
           <div className="grid gap-4 xl:grid-cols-[1.05fr_1.15fr]">
             <Card className="space-y-4">
               <div>
-                <h2 className="font-semibold">原始漏洞文本</h2>
-                <p className="mt-1 text-sm text-slate-500">输入原文后执行相关性判断、字段抽取、风险评分和相似记录比对。</p>
+                <h2 className="font-semibold">原文</h2>
+                <p className="mt-1 text-sm text-slate-500">粘贴漏洞原文，生成待核对字段。</p>
               </div>
               <Textarea
                 className="min-h-[480px]"
@@ -299,8 +299,8 @@ export function AiExtractClient() {
             <Card className="space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-semibold">结构化审阅结果</h2>
-                  <p className="mt-1 text-sm text-slate-500">系统保留模型原始结果；请逐字段核对，修订后再确认入库。</p>
+                  <h2 className="font-semibold">待核对字段</h2>
+                  <p className="mt-1 text-sm text-slate-500">请核对并修改字段，确认无误后入库。</p>
                 </div>
                 {modifiedFields.length > 0 ? (
                   <div className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-700">已修改 {modifiedFields.length} 个字段</div>
@@ -311,14 +311,14 @@ export function AiExtractClient() {
                 <>
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="rounded-md border border-border bg-slate-50 p-3">
-                      <div className="text-xs text-slate-500">模型相关性判断</div>
+                      <div className="text-xs text-slate-500">相关性判断</div>
                       <div className="mt-1 font-medium">
                         {analysis?.relevance.is_ai_vulnerability ? "识别为 AI 漏洞文本" : "未识别为 AI 漏洞文本"}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">置信度 {pct(analysis?.relevance.confidence)}</div>
                     </div>
                     <div className="rounded-md border border-border bg-slate-50 p-3">
-                      <div className="text-xs text-slate-500">领域分类</div>
+                      <div className="text-xs text-slate-500">分类</div>
                       <div className="mt-1 font-medium">{analysis?.relevance.related_area || "-"}</div>
                       <div className="mt-1 text-sm text-slate-600">{analysis?.relevance.reason || "-"}</div>
                     </div>
@@ -378,7 +378,7 @@ export function AiExtractClient() {
                   </div>
 
                   <div className="rounded-md border border-border bg-slate-50 p-3 text-sm text-slate-700">
-                    <div className="font-medium">Merge Suggestions</div>
+                    <div className="font-medium">合并建议</div>
                     <div className="mt-2 whitespace-pre-wrap">
                       {String(result.merge_suggestions?.reason ?? "暂无合并建议。")}
                     </div>
@@ -399,7 +399,7 @@ export function AiExtractClient() {
                   <div className="space-y-3 rounded-md border border-border p-3">
                     <div className="flex items-center gap-2">
                       <BadgeCheck size={16} />
-                      <div className="font-medium">人工修订闭环</div>
+                      <div className="font-medium">修改说明</div>
                     </div>
                     <p className="text-sm text-slate-500">
                       模型原始结果保存在分析任务中，当前表单保存的是人工修订后的正式漏洞记录。
@@ -427,11 +427,11 @@ export function AiExtractClient() {
             <Card className="space-y-4">
               <div className="flex items-center gap-2">
                 <Sparkles size={16} />
-                <h2 className="font-semibold">分析执行轨迹</h2>
+                <h2 className="font-semibold">处理记录</h2>
               </div>
 
               <div className="rounded-md border border-border bg-slate-50 p-3 text-sm text-slate-700">
-                <div className="font-medium">资产影响摘要</div>
+                <div className="font-medium">影响摘要</div>
                 <div className="mt-1 whitespace-pre-wrap">{analysis.analysis_job.asset_impact_summary || "-"}</div>
               </div>
 
@@ -459,7 +459,7 @@ export function AiExtractClient() {
 
           {analysis?.report ? (
             <Card>
-              <h2 className="mb-3 font-semibold">分析报告</h2>
+              <h2 className="mb-3 font-semibold">处理结果</h2>
               <pre className="whitespace-pre-wrap text-sm text-slate-700">{analysis.report}</pre>
             </Card>
           ) : null}

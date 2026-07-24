@@ -131,7 +131,7 @@ export default async function SecurityModelPage() {
       </section>
 
       <Card className="p-0">
-        <SectionHeader icon={GitBranch} title="情报处理闭环" description="从不可信外部内容到可追溯知识服务的完整处理路径。" />
+        <SectionHeader icon={GitBranch} title="情报处理流程" description="从采集到入库的完整步骤。" />
         <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
           {model.business_flow.map((step, index) => (
             <div className="relative flex items-center gap-2 xl:block" key={step}>
@@ -148,7 +148,7 @@ export default async function SecurityModelPage() {
       </Card>
 
       <Card className="p-0">
-        <SectionHeader icon={Layers3} title="系统架构" description="按职责分层展示当前已经落地的核心组件。" />
+        <SectionHeader icon={Layers3} title="系统架构" description="当前系统组件及其关系。" />
         <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
           {layerGroups.map(({ layer, nodes }) => {
             const Icon = LAYER_ICONS[layer as keyof typeof LAYER_ICONS] ?? Layers3;
@@ -170,12 +170,11 @@ export default async function SecurityModelPage() {
           })}
         </div>
         <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-          {model.architecture_edges.length} 条组件调用关系由后端安全模型统一维护。
         </div>
       </Card>
 
       <Card className="p-0">
-        <SectionHeader icon={LockKeyhole} title="信任边界" description="跨越边界的数据必须经过校验、最小化和审计。" />
+        <SectionHeader icon={LockKeyhole} title="信任边界" description="不同信任域之间的数据会经过校验、裁剪和审计。" />
         <div className="grid gap-4 p-4 lg:grid-cols-3">
           {model.trust_boundaries.map((boundary) => (
             <section
@@ -205,7 +204,7 @@ export default async function SecurityModelPage() {
       </Card>
 
       <Card className="overflow-hidden p-0">
-        <SectionHeader icon={AlertTriangle} title="STRIDE 风险清单" description="区分当前控制与待补强措施，避免把规划能力描述为已实施能力。" />
+        <SectionHeader icon={AlertTriangle} title="STRIDE 风险清单" description="列出已实施和待补充的控制措施。" />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] table-fixed text-sm">
             <colgroup>
@@ -257,7 +256,7 @@ export default async function SecurityModelPage() {
           <Checklist items={model.rag_controls} />
         </Card>
         <Card className="p-0">
-          <SectionHeader icon={CheckCircle2} title="上线安全基线" description="进入生产环境前必须完成的安全能力。" />
+          <SectionHeader icon={CheckCircle2} title="上线安全基线" description="上线前需要完成的安全检查。" />
           <Checklist items={model.release_baseline} />
         </Card>
       </div>

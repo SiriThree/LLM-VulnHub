@@ -38,12 +38,12 @@ const groups = [
     title: "总览",
     items: [
       { href: "/dashboard", label: "平台看板", icon: BarChart3, minRole: "guest" as Role },
-      { href: "/ops", label: "运行运营", icon: LineChart, minRole: "viewer" as Role },
+      { href: "/ops", label: "运营中心", icon: LineChart, minRole: "viewer" as Role },
       { href: "/notifications", label: "通知中心", icon: Bell, minRole: "analyst" as Role },
     ],
   },
   {
-    title: "情报流程",
+    title: "采集与审核",
     items: [
       { href: "/collectors", label: "动态采集", icon: Radar, minRole: "analyst" as Role },
       { href: "/intel-pool", label: "情报池", icon: Inbox, minRole: "analyst" as Role },
@@ -51,11 +51,11 @@ const groups = [
     ],
   },
   {
-    title: "漏洞资产",
+    title: "漏洞库",
     items: [
       { href: "/vulnerabilities", label: "公开漏洞", icon: Database, minRole: "guest" as Role },
       { href: "/vulnerabilities/new", label: "手动新增", icon: FilePlus2, minRole: "analyst" as Role },
-      { href: "/ai-extract", label: "辅助抽取", icon: Bot, minRole: "analyst" as Role },
+      { href: "/ai-extract", label: "信息提取", icon: Bot, minRole: "analyst" as Role },
       { href: "/rag-chat", label: "知识检索", icon: MessageSquare, minRole: "viewer" as Role },
     ],
   },
@@ -158,7 +158,7 @@ function Navigation({ pathname, role, compact = false }: { pathname: string; rol
 
       {role === "guest" ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-          <div className="text-xs leading-5 text-emerald-900">登录账号后可使用知识检索和工作流功能。</div>
+          <div className="text-xs leading-5 text-emerald-900">登录后可使用知识检索、采集和审核功能。</div>
           <Link className="mt-2 flex items-center gap-2 text-sm font-medium text-emerald-800 hover:underline" href="/login">
             <LogIn size={15} />
             账号登录

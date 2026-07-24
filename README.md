@@ -1,6 +1,6 @@
 # LLM-VulnHub
 
-> 架构图、RAG 数据流、信任边界与 STRIDE 风险清单见 [`docs/Architecture-and-Threat-Model.md`](docs/Architecture-and-Threat-Model.md)。
+> 架构图、RAG 数据流、信任边界与威胁模型见 [`docs/Architecture-and-Threat-Model.md`](docs/Architecture-and-Threat-Model.md)。
 
 LLM-VulnHub 是一个面向大语言模型应用安全的漏洞情报平台，用于把公开来源中的原始安全文本转化为可采集、可分析、可复核、可入库、可检索和可问答的 AI / LLM 漏洞资产。
 

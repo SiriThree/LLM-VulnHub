@@ -14,6 +14,7 @@ type PaginationCommonProps = {
   pageSizeOptions?: number[];
   itemLabel?: string;
   className?: string;
+  compact?: boolean;
 };
 
 type ControlledPaginationProps = PaginationCommonProps & {
@@ -45,6 +46,7 @@ export function Pagination(props: PaginationProps) {
     pageSizeOptions = [5, 10, 20, 50],
     itemLabel = "条记录",
     className,
+    compact = false,
   } = props;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(Math.max(1, page), pageCount);
@@ -93,11 +95,12 @@ export function Pagination(props: PaginationProps) {
     <nav
       aria-label="分页"
       className={cn(
-        "mt-auto grid min-h-16 shrink-0 items-center gap-3 border-t border-border pt-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_144px_176px]",
+        "mt-auto grid min-h-16 shrink-0 items-center gap-3 border-t border-border pt-3 text-sm",
+        compact ? "grid-cols-[minmax(0,1fr)_144px]" : "sm:grid-cols-[minmax(0,1fr)_auto_144px_176px]",
         className,
       )}
     >
-      <div className="min-w-0 text-slate-500">
+      <div className={cn("min-w-0 text-slate-500", compact && "col-span-2")}>
         共 {total} {itemLabel} · 第 {safePage} / {pageCount} 页
       </div>
       <label className="flex items-center gap-2 whitespace-nowrap text-slate-500">
@@ -128,7 +131,10 @@ export function Pagination(props: PaginationProps) {
           跳转
         </Button>
       </form>
-      <div className="grid w-44 grid-cols-2 gap-2 justify-self-start sm:justify-self-end">
+      <div className={cn(
+        "grid w-44 grid-cols-2 gap-2 justify-self-start sm:justify-self-end",
+        compact && "col-span-2 w-full justify-self-stretch",
+      )}>
         {isLinkMode ? (
           previousDisabled ? (
             <span className={cn(controlClass, "inline-flex items-center justify-center rounded-md opacity-50")}>上一页</span>

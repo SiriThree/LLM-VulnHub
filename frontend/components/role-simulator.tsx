@@ -58,7 +58,6 @@ export function RoleSimulator() {
         </div>
         <div>
           <h2 className="font-semibold">登录会话</h2>
-          <p className="text-sm text-slate-500">身份和角色由后端校验，浏览器只保存 HttpOnly 随机会话 Cookie。</p>
         </div>
       </div>
 
@@ -84,7 +83,6 @@ export function RoleSimulator() {
 
       {message ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-slate-600">{message}</div> : null}
       <p className="text-xs leading-5 text-slate-500">
-        账户密码通过环境变量配置；连续失败会触发限速，写操作还需要与会话绑定的 CSRF Token。
       </p>
     </Card>
   );

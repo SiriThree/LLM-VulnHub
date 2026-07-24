@@ -43,15 +43,15 @@ export default function SettingsPage() {
         <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-3">
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">模型抽取</div>
-            <div className="mt-1 leading-6">进入辅助抽取页，输入一段漏洞描述，核对标题、类型、组件、攻击方式和修复建议。</div>
+            <div className="mt-1 leading-6">进入信息提取页，输入一段漏洞描述，核对标题、类型、组件、攻击方式和修复建议。</div>
           </div>
           <div className="rounded-md bg-slate-50 p-3">
             <div className="font-medium text-slate-900">权限控制</div>
             <div className="mt-1 leading-6">分别使用 viewer、analyst 和 admin 账户登录，确认服务端角色权限和记录可见范围。</div>
           </div>
           <div className="rounded-md bg-slate-50 p-3">
-            <div className="font-medium text-slate-900">运行观测</div>
-            <div className="mt-1 leading-6">进入运行运营页，查看任务状态、模型调用次数和 token 消耗。</div>
+            <div className="font-medium text-slate-900">运行状态检查</div>
+            <div className="mt-1 leading-6">进入运营中心，查看任务状态、模型调用次数和 Token 用量。</div>
           </div>
         </div>
       </Card>
