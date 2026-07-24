@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Check, GitMerge, RefreshCcw, RotateCcw, ShieldCheck, X } from "lucide-react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ArrowLeft, Check, GitMerge, RefreshCcw, RotateCcw, ShieldCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -97,6 +104,50 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
+  const [mobilePane, setMobilePane] = useState<"list" | "detail">(initialSelected ? "detail" : "list");
+  const [listWidth, setListWidth] = useState(380);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const storedWidth = Number(window.localStorage.getItem("llm-vulnhub:intel-pool-list-width"));
+    if (Number.isFinite(storedWidth) && storedWidth >= 320) {
+      setListWidth(storedWidth);
+    }
+  }, []);
+
+  function startResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+
+    event.preventDefault();
+    const bounds = workspace.getBoundingClientRect();
+    const maximum = Math.max(320, Math.min(bounds.width * 0.55, bounds.width - 532));
+    const minimum = Math.min(360, maximum);
+
+    function resize(moveEvent: PointerEvent) {
+      setListWidth(Math.min(maximum, Math.max(minimum, moveEvent.clientX - bounds.left)));
+    }
+
+    function finishResize(upEvent: PointerEvent) {
+      const nextWidth = Math.min(maximum, Math.max(minimum, upEvent.clientX - bounds.left));
+      setListWidth(nextWidth);
+      window.localStorage.setItem("llm-vulnhub:intel-pool-list-width", String(Math.round(nextWidth)));
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", finishResize);
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", finishResize);
+  }
+
+  function resetListWidth() {
+    setListWidth(380);
+    window.localStorage.setItem("llm-vulnhub:intel-pool-list-width", "380");
+  }
 
   async function load(nextSelectedId?: number | null) {
     const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
@@ -455,8 +506,14 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card className="flex h-full flex-col p-0">
+      <div
+        ref={workspaceRef}
+        className="grid items-start gap-4 xl:grid-cols-[var(--intel-list-width)_12px_minmax(520px,1fr)] xl:gap-0"
+        style={{ "--intel-list-width": `${listWidth}px` } as CSSProperties}
+      >
+        <Card
+          className={`${mobilePane === "detail" ? "hidden xl:flex" : "flex"} min-w-0 flex-col overflow-hidden p-0 xl:sticky xl:top-5 xl:h-[calc(100vh-2.5rem)]`}
+        >
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="font-semibold">情报列表</div>
             <label className="flex items-center gap-2 text-xs text-slate-500">
@@ -464,14 +521,21 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               全选
             </label>
           </div>
-          <div className="flex-1" style={{ minHeight: `${pageSize * 72}px` }}>
+          <div className="flex-1 overscroll-contain overflow-y-auto" style={{ minHeight: `${pageSize * 72}px` }}>
             {items.length > 0 ? items.map((item) => (
               <div
                 key={item.id}
                 className={`flex items-start gap-3 border-b border-border px-4 py-3 transition last:border-0 ${selectedId === item.id ? "bg-muted" : "bg-white hover:bg-slate-50"}`}
               >
                 <input className="mt-1" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelection(item.id)} />
-                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedId(item.id)}>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => {
+                    setSelectedId(item.id);
+                    setMobilePane("detail");
+                  }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="line-clamp-2 font-medium">{item.title}</div>
@@ -493,6 +557,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
           </div>
           <Pagination
             className="px-4 pb-3"
+            compact
             total={total}
             page={page}
             pageSize={pageSize}
@@ -505,45 +570,67 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
           />
         </Card>
 
-        <Card>
+        <button
+          type="button"
+          aria-label="调整情报列表宽度"
+          title="拖动调整宽度，双击恢复默认宽度"
+          className="group relative hidden h-full min-h-[calc(100vh-2.5rem)] cursor-col-resize touch-none self-stretch xl:block"
+          onPointerDown={startResize}
+          onDoubleClick={resetListWidth}
+        >
+          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition group-hover:w-1 group-hover:bg-primary/50" />
+          <span className="absolute left-1/2 top-1/2 h-10 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-300 transition group-hover:bg-primary" />
+        </button>
+
+        <Card className={`${mobilePane === "list" ? "hidden xl:block" : "block"} min-w-0`}>
           {selected ? (
             <div className="space-y-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">{selected.title}</h2>
-                  <div className="mt-1 text-sm text-slate-500">
-                    状态 {STATUS_LABELS[selected.status] ?? selected.status} | 分类 {selected.triage_category} | 置信度 {Math.round(selected.triage_confidence * 100)}%
+              <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-border bg-white px-5 py-4 shadow-sm">
+                <button
+                  type="button"
+                  className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 xl:hidden"
+                  onClick={() => setMobilePane("list")}
+                >
+                  <ArrowLeft size={16} />
+                  返回情报列表
+                </button>
+                <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold">{selected.title}</h2>
+                    <div className="mt-1 text-sm text-slate-500">
+                      状态 {STATUS_LABELS[selected.status] ?? selected.status} | 分类 {selected.triage_category} | 置信度 {Math.round(selected.triage_confidence * 100)}%
+                    </div>
+                    <div className="mt-2 text-xs text-slate-400">
+                      intelligence #{selected.id}
+                      {selected.vulnerability_id ? (
+                        <>
+                          {" "} | 已关联
+                          <Link className="ml-1 text-primary hover:underline" href={`/vulnerabilities/${selected.vulnerability_id}`}>
+                            漏洞 #{selected.vulnerability_id}
+                          </Link>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="mt-2 text-xs text-slate-400">
-                    intelligence #{selected.id}
-                    {selected.vulnerability_id ? (
-                      <>
-                        {" "} | 已关联
-                        <Link className="ml-1 text-primary hover:underline" href={`/vulnerabilities/${selected.vulnerability_id}`}>
-                          漏洞 #{selected.vulnerability_id}
-                        </Link>
-                      </>
-                    ) : null}
+                  <div className="grid shrink-0 grid-cols-3 gap-2 sm:flex">
+                    <Button type="button" onClick={approve} disabled={submitting || !canApproveSelected}>
+                      <Check size={16} />
+                      确认入库
+                    </Button>
+                    <Button type="button" onClick={reject} disabled={submitting || !canApproveSelected} className="bg-accent">
+                      <X size={16} />
+                      驳回
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={undoReview}
+                      disabled={submitting || !canUndoSelected}
+                      className="border border-border bg-white text-slate-700"
+                    >
+                      <RotateCcw size={16} />
+                      撤销
+                    </Button>
                   </div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button type="button" onClick={approve} disabled={submitting || !canApproveSelected}>
-                    <Check size={16} />
-                    确认入库
-                  </Button>
-                  <Button type="button" onClick={reject} disabled={submitting || !canApproveSelected} className="bg-accent">
-                    <X size={16} />
-                    驳回
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={undoReview}
-                    disabled={submitting || !canUndoSelected}
-                    className="border border-border bg-white text-slate-700"
-                  >
-                    <RotateCcw size={16} />
-                    撤销
-                  </Button>
                 </div>
               </div>
 
@@ -712,7 +799,19 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                 ) : <div className="rounded-md border border-border bg-white p-3 text-sm text-slate-500">当前还没有审核动作。</div>}
               </div>
             </div>
-          ) : <div className="text-sm text-slate-500">请选择一条情报查看详细内容。</div>}
+          ) : (
+            <div className="space-y-4">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 xl:hidden"
+                onClick={() => setMobilePane("list")}
+              >
+                <ArrowLeft size={16} />
+                返回情报列表
+              </button>
+              <div className="text-sm text-slate-500">请选择一条情报查看详细内容。</div>
+            </div>
+          )}
         </Card>
       </div>
 
