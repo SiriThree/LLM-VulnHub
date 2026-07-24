@@ -492,35 +492,35 @@ def reject_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState
 def report_node(state: VulnerabilityAnalysisState) -> VulnerabilityAnalysisState:
     fields = state["extracted_fields"]
     similar_lines = [
-        f"- #{item.get('vulnerability', {}).get('id')} {item.get('vulnerability', {}).get('title')} (similarity {item.get('similarity', 0):.4f})"
+        f"- #{item.get('vulnerability', {}).get('id')} {item.get('vulnerability', {}).get('title')}（匹配度 {item.get('similarity', 0):.4f}）"
         for item in state.get("similar", [])
     ]
-    similar_text = "\n".join(similar_lines) if similar_lines else "- No high-confidence canonical match passed the merge filter."
+    similar_text = "\n".join(similar_lines) if similar_lines else "- 未找到通过合并筛选的高置信度记录。"
     asset = state.get("asset_impact_details", {})
     asset_block = "\n".join(
         [
-            f"- Impacted assets: {normalize_missing_text(asset.get('impacted_assets'))}",
-            f"- Tenant scope: {normalize_missing_text(asset.get('tenant_scope'))}",
-            f"- Blast radius: {normalize_missing_text(asset.get('blast_radius'))}",
-            f"- Operational risk: {normalize_missing_text(asset.get('operational_risk'))}",
-            f"- Summary: {normalize_missing_text(state.get('asset_impact_summary', ''))}",
+            f"- 受影响资产：{normalize_missing_text(asset.get('impacted_assets'))}",
+            f"- 租户范围：{normalize_missing_text(asset.get('tenant_scope'))}",
+            f"- 影响范围：{normalize_missing_text(asset.get('blast_radius'))}",
+            f"- 运营风险：{normalize_missing_text(asset.get('operational_risk'))}",
+            f"- 摘要：{normalize_missing_text(state.get('asset_impact_summary', ''))}",
         ]
     )
     state["report"] = (
         f"# {fields.get('title', '未命名漏洞')}\n\n"
-        f"- Type: {fields.get('vuln_type', '待确认')}\n"
-        f"- Severity: {state.get('severity', fields.get('severity', '待确认'))}\n"
-        f"- Score: {state.get('score', fields.get('score', 0))}\n"
-        f"- Affected component: {fields.get('affected_component', '待确认')}\n"
-        f"- Priority: {state.get('risk_priority', '中')}\n\n"
-        f"## Description\n{normalize_missing_text(fields.get('description'))}\n\n"
-        f"## Attack Method\n{normalize_missing_text(fields.get('attack_method'))}\n\n"
-        f"## Impact\n{normalize_missing_text(fields.get('impact'))}\n\n"
-        f"## Mitigation\n{normalize_missing_text(fields.get('mitigation'))}\n\n"
-        f"## Merge Suggestions\n{similar_text}\n\n"
-        f"## Risk Explanation Agent\n{normalize_missing_text(state.get('risk_reason'))}\n\n"
-        f"## Asset Impact Agent\n{asset_block}\n\n"
-        f"## Reviewer Agent\n{normalize_missing_text(state.get('review_summary'))}\n"
+        f"- 漏洞类型：{fields.get('vuln_type', '待确认')}\n"
+        f"- 风险等级：{state.get('severity', fields.get('severity', '待确认'))}\n"
+        f"- 风险评分：{state.get('score', fields.get('score', 0))}\n"
+        f"- 受影响组件：{fields.get('affected_component', '待确认')}\n"
+        f"- 处理优先级：{state.get('risk_priority', '中')}\n\n"
+        f"## 漏洞描述\n{normalize_missing_text(fields.get('description'))}\n\n"
+        f"## 攻击方式\n{normalize_missing_text(fields.get('attack_method'))}\n\n"
+        f"## 影响\n{normalize_missing_text(fields.get('impact'))}\n\n"
+        f"## 修复建议\n{normalize_missing_text(fields.get('mitigation'))}\n\n"
+        f"## 合并建议\n{similar_text}\n\n"
+        f"## 风险说明\n{normalize_missing_text(state.get('risk_reason'))}\n\n"
+        f"## 资产影响\n{asset_block}\n\n"
+        f"## 复核意见\n{normalize_missing_text(state.get('review_summary'))}\n"
     )
     return state
 

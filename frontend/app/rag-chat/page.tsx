@@ -17,12 +17,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import { Textarea } from "@/components/ui/input";
 import { api, Vulnerability } from "@/lib/api";
 import { useSessionDraft } from "@/lib/use-session-draft";
 
 type Hit = { vulnerability: Vulnerability; similarity: number; chunk_text: string };
-type RagResponse = { answer: string; references: Hit[] };
+type RagResponse = { answer: string; references: Hit[]; cited_reference_ids: number[] };
 
 const EXAMPLE_QUESTIONS = [
   "RAG 数据泄露通常有哪些缓解措施？",
@@ -34,10 +35,15 @@ export default function RagChatPage() {
   const [question, setQuestion] = useSessionDraft("llm-vulnhub:rag-question-draft:v1", EXAMPLE_QUESTIONS[0]);
   const [answer, setAnswer] = useSessionDraft("llm-vulnhub:rag-answer-draft:v1", "");
   const [refs, setRefs] = useSessionDraft<Hit[]>("llm-vulnhub:rag-references-draft:v1", []);
+  const [citedReferenceIds, setCitedReferenceIds] = useSessionDraft<number[]>(
+    "llm-vulnhub:rag-cited-reference-ids-draft:v1",
+    [],
+  );
   const [topK, setTopK] = useSessionDraft("llm-vulnhub:rag-top-k-draft:v1", 5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [highlightedReferenceId, setHighlightedReferenceId] = useState<number | null>(null);
 
   const uniqueRefs = useMemo(
     () => refs.filter((hit, index, list) => list.findIndex((item) => item.vulnerability.id === hit.vulnerability.id) === index),
@@ -63,6 +69,7 @@ export default function RagChatPage() {
       });
       setAnswer(result.answer);
       setRefs(result.references);
+      setCitedReferenceIds(result.cited_reference_ids ?? []);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "问答服务暂时不可用，请稍后重试。");
     } finally {
@@ -84,6 +91,20 @@ export default function RagChatPage() {
     window.setTimeout(() => setCopied(false), 1600);
   }
 
+  function focusReference(referenceNumber: number) {
+    const hit = refs[referenceNumber - 1];
+    if (!hit) return;
+    const vulnerabilityId = hit.vulnerability.id;
+    setHighlightedReferenceId(vulnerabilityId);
+    document.getElementById(`rag-reference-vulnerability-${vulnerabilityId}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    window.setTimeout(() => {
+      setHighlightedReferenceId((current) => (current === vulnerabilityId ? null : current));
+    }, 2400);
+  }
+
   return (
     <div className="space-y-6">
       <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 px-5 py-6 text-white shadow-soft sm:px-6 sm:py-7">
@@ -98,7 +119,11 @@ export default function RagChatPage() {
           <div className="flex gap-6 text-sm">
             <div>
               <div className="text-2xl font-semibold">{refs.length || "-"}</div>
-              <div className="mt-1 text-xs text-slate-400">匹配片段</div>
+              <div className="mt-1 text-xs text-slate-400">匹配记录</div>
+            </div>
+            <div>
+              <div className="text-2xl font-semibold">{answer ? citedReferenceIds.length : "-"}</div>
+              <div className="mt-1 text-xs text-slate-400">实际引用</div>
             </div>
             <div>
               <div className="text-2xl font-semibold">{topSimilarity ? `${topSimilarity}%` : "-"}</div>
@@ -132,7 +157,7 @@ export default function RagChatPage() {
               />
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <label htmlFor="top-k">参考记录数</label>
+                  <label htmlFor="top-k">最大匹配记录数</label>
                   <select
                     className="h-9 rounded-md border border-border bg-white px-2 text-sm text-slate-700 outline-none focus:border-primary"
                     id="top-k"
@@ -209,7 +234,13 @@ export default function RagChatPage() {
                   <div className="mt-6 h-4 w-10/12 animate-pulse rounded bg-slate-100" />
                 </div>
               ) : answer ? (
-                <div className="whitespace-pre-wrap text-[15px] leading-7 text-slate-700">{answer}</div>
+                <div className="text-[15px] text-slate-700">
+                  <SafeMarkdown
+                    content={answer}
+                    referenceCount={refs.length}
+                    onCitationClick={focusReference}
+                  />
+                </div>
               ) : (
                 <div className="flex min-h-48 flex-col items-center justify-center text-center">
                   <div className="mb-3 rounded-full bg-slate-100 p-3 text-slate-400">
@@ -229,7 +260,7 @@ export default function RagChatPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Database size={17} className="text-slate-500" />
-                  <h2 className="font-semibold">参考漏洞</h2>
+                  <h2 className="font-semibold">匹配记录</h2>
                 </div>
                 {uniqueRefs.length > 0 ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">{uniqueRefs.length} 条记录</span> : null}
               </div>
@@ -249,8 +280,13 @@ export default function RagChatPage() {
                   const similarity = Math.round(hit.similarity * 100);
                   return (
                     <Link
-                      className="group block rounded-lg border border-slate-200 bg-white p-3 transition hover:border-slate-300 hover:bg-slate-50"
+                      className={`group block rounded-lg border bg-white p-3 transition hover:bg-slate-50 ${
+                        highlightedReferenceId === hit.vulnerability.id
+                          ? "border-primary ring-2 ring-primary/20"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
                       href={`/vulnerabilities/${hit.vulnerability.id}`}
+                      id={`rag-reference-vulnerability-${hit.vulnerability.id}`}
                       key={hit.vulnerability.id}
                     >
                       <div className="mb-2 flex items-start gap-2">
@@ -260,7 +296,14 @@ export default function RagChatPage() {
                       </div>
                       <div className="mb-3 line-clamp-3 text-xs leading-5 text-slate-500">{hit.chunk_text}</div>
                       <div className="flex items-center justify-between gap-3">
-                        <Badge>{hit.vulnerability.severity}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge>{hit.vulnerability.severity}</Badge>
+                          {citedReferenceIds.includes(hit.vulnerability.id) ? (
+                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                              已引用
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="flex flex-1 items-center justify-end gap-2">
                           <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
                             <div className="h-full rounded-full bg-slate-700" style={{ width: `${Math.max(4, similarity)}%` }} />

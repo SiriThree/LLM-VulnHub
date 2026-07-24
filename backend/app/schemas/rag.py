@@ -23,3 +23,4 @@ class SearchHit(BaseModel):
 class RagAskResponse(BaseModel):
     answer: str
     references: list[SearchHit]
+    cited_reference_ids: list[int] = Field(default_factory=list)

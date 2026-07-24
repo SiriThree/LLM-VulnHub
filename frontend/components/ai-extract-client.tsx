@@ -1,12 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, Bot, CheckCircle2, FlaskConical, Play, Save, Sparkles } from "lucide-react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ArrowLeft, BadgeCheck, Bot, CheckCircle2, FlaskConical, PanelRightOpen, Play, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
 import { Pagination } from "@/components/pagination";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import {
   AnalyzeResult,
   api,
@@ -126,6 +134,9 @@ export function AiExtractClient() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [mobilePane, setMobilePane] = useState<"source" | "review">("source");
+  const [sourceWidth, setSourceWidth] = useState(440);
+  const workspaceRef = useRef<HTMLDivElement>(null);
 
   const [dataset, setDataset] = useState<EvalDataset | null>(null);
   const [evalRuns, setEvalRuns] = useState<EvalRun[]>([]);
@@ -145,6 +156,47 @@ export function AiExtractClient() {
   useEffect(() => {
     loadEvaluation();
   }, []);
+
+  useEffect(() => {
+    const storedWidth = Number(window.localStorage.getItem("llm-vulnhub:ai-extract-source-width"));
+    if (Number.isFinite(storedWidth) && storedWidth >= 340) {
+      setSourceWidth(storedWidth);
+    }
+  }, []);
+
+  function startResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+
+    event.preventDefault();
+    const bounds = workspace.getBoundingClientRect();
+    const maximum = Math.max(340, Math.min(bounds.width * 0.58, bounds.width - 572));
+    const minimum = Math.min(360, maximum);
+
+    function resize(moveEvent: PointerEvent) {
+      setSourceWidth(Math.min(maximum, Math.max(minimum, moveEvent.clientX - bounds.left)));
+    }
+
+    function finishResize(upEvent: PointerEvent) {
+      const nextWidth = Math.min(maximum, Math.max(minimum, upEvent.clientX - bounds.left));
+      setSourceWidth(nextWidth);
+      window.localStorage.setItem("llm-vulnhub:ai-extract-source-width", String(Math.round(nextWidth)));
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", finishResize);
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", finishResize);
+  }
+
+  function resetSourceWidth() {
+    setSourceWidth(440);
+    window.localStorage.setItem("llm-vulnhub:ai-extract-source-width", "440");
+  }
 
   async function loadEvaluation() {
     setEvalLoading(true);
@@ -177,6 +229,7 @@ export function AiExtractClient() {
       setResult(analyzed.extracted);
       setReviewNote("");
       setMode("workspace");
+      setMobilePane("review");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "分析失败。");
     } finally {
@@ -260,7 +313,10 @@ export function AiExtractClient() {
             <button
               key={item.label}
               className="rounded-md border border-border px-3 py-1.5 text-sm text-slate-600 hover:border-primary hover:text-primary"
-              onClick={() => setRaw(item.value)}
+              onClick={() => {
+                setRaw(item.value);
+                setMobilePane("source");
+              }}
               type="button"
             >
               {item.label}
@@ -271,40 +327,84 @@ export function AiExtractClient() {
 
       {mode === "workspace" ? (
         <>
-          <div className="grid gap-4 xl:grid-cols-[1.05fr_1.15fr]">
-            <Card className="space-y-4">
-              <div>
+          <div
+            ref={workspaceRef}
+            className="grid items-start gap-4 xl:grid-cols-[var(--extract-source-width)_12px_minmax(560px,1fr)] xl:gap-0"
+            style={{ "--extract-source-width": `${sourceWidth}px` } as CSSProperties}
+          >
+            <Card
+              className={`${mobilePane === "review" ? "hidden xl:flex" : "flex"} min-w-0 flex-col overflow-hidden p-0 xl:sticky xl:top-5 xl:h-[calc(100vh-2.5rem)]`}
+            >
+              <div className="shrink-0 border-b border-border px-5 py-4">
                 <h2 className="font-semibold">原文</h2>
                 <p className="mt-1 text-sm text-slate-500">粘贴漏洞原文，生成待核对字段。</p>
               </div>
-              <Textarea
-                className="min-h-[480px]"
-                maxLength={12000}
-                value={raw}
-                onChange={(event) => setRaw(event.target.value)}
-              />
-              <div className="flex flex-wrap items-center gap-3">
-                <Button disabled={loading} onClick={handleExtract} type="button">
-                  <Bot size={16} />
-                  {loading ? "分析中..." : "开始提取"}
-                </Button>
-                {analysis?.analysis_job ? (
-                  <div className="text-sm text-slate-500">
-                    Job #{analysis.analysis_job.id} · {analysis.analysis_job.pipeline_name} · {analysis.analysis_job.model_name}
+              <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+                <Textarea
+                  className="min-h-[320px] flex-1 resize-none overscroll-contain"
+                  maxLength={12000}
+                  value={raw}
+                  onChange={(event) => setRaw(event.target.value)}
+                />
+                <div className="shrink-0 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button disabled={loading} onClick={handleExtract} type="button">
+                      <Bot size={16} />
+                      {loading ? "分析中..." : "开始提取"}
+                    </Button>
+                    {result ? (
+                      <Button
+                        className="border border-border bg-white text-slate-700 xl:hidden"
+                        onClick={() => setMobilePane("review")}
+                        type="button"
+                      >
+                        <PanelRightOpen size={16} />
+                        查看待核对字段
+                      </Button>
+                    ) : null}
                   </div>
-                ) : null}
+                  {analysis?.analysis_job ? (
+                    <div className="break-words text-xs leading-5 text-slate-500">
+                      Job #{analysis.analysis_job.id} · {analysis.analysis_job.pipeline_name} · {analysis.analysis_job.model_name}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </Card>
 
-            <Card className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold">待核对字段</h2>
-                  <p className="mt-1 text-sm text-slate-500">请核对并修改字段，确认无误后入库。</p>
+            <button
+              type="button"
+              aria-label="调整原文区域宽度"
+              title="拖动调整宽度，双击恢复默认宽度"
+              className="group relative hidden h-full min-h-[calc(100vh-2.5rem)] cursor-col-resize touch-none self-stretch xl:block"
+              onPointerDown={startResize}
+              onDoubleClick={resetSourceWidth}
+            >
+              <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition group-hover:w-1 group-hover:bg-primary/50" />
+              <span className="absolute left-1/2 top-1/2 h-10 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-300 transition group-hover:bg-primary" />
+            </button>
+
+            <Card className={`${mobilePane === "source" ? "hidden xl:block" : "block"} min-w-0 space-y-4`}>
+              <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-border bg-white px-5 py-4 shadow-sm">
+                <button
+                  type="button"
+                  className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 xl:hidden"
+                  onClick={() => setMobilePane("source")}
+                >
+                  <ArrowLeft size={16} />
+                  返回原文
+                </button>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold">待核对字段</h2>
+                    <p className="mt-1 text-sm text-slate-500">请核对并修改字段，确认无误后入库。</p>
+                  </div>
+                  {modifiedFields.length > 0 ? (
+                    <div className="shrink-0 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-700">
+                      已修改 {modifiedFields.length} 个字段
+                    </div>
+                  ) : null}
                 </div>
-                {modifiedFields.length > 0 ? (
-                  <div className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-700">已修改 {modifiedFields.length} 个字段</div>
-                ) : null}
               </div>
 
               {result ? (
@@ -460,7 +560,9 @@ export function AiExtractClient() {
           {analysis?.report ? (
             <Card>
               <h2 className="mb-3 font-semibold">处理结果</h2>
-              <pre className="whitespace-pre-wrap text-sm text-slate-700">{analysis.report}</pre>
+              <div className="text-sm text-slate-700">
+                <SafeMarkdown content={analysis.report} />
+              </div>
             </Card>
           ) : null}
         </>

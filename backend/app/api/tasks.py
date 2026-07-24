@@ -6,12 +6,7 @@ from app.core.security import RequestIdentity, require_role
 from app.db.models import Task
 from app.db.session import get_db
 from app.schemas.task import TaskListResponse, TaskRead
-from app.services.collector_service import (
-    dispatch_analysis_task,
-    dispatch_collection_task,
-    dispatch_notification_task,
-    dispatch_review_task,
-)
+from app.services.task_dispatch_registry import UnsupportedTaskTypeError, get_task_dispatcher
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -74,6 +69,10 @@ def retry_task(
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "task not found")
+    try:
+        dispatcher = get_task_dispatcher(task.task_type)
+    except UnsupportedTaskTypeError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
     task.status = "queued"
     task.error_message = None
@@ -103,13 +102,6 @@ def retry_task(
     db.commit()
     db.refresh(task)
 
-    if task.task_type == "crawl":
-        dispatch_collection_task(task.id)
-    elif task.task_type == "analyze_document":
-        dispatch_analysis_task(task.id)
-    elif task.task_type == "review_helper":
-        dispatch_review_task(task.id)
-    elif task.task_type == "notification":
-        dispatch_notification_task(task.id)
+    dispatcher(task.id)
 
     return task

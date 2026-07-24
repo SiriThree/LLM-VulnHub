@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -10,6 +11,10 @@ from app.schemas.vulnerability import VulnerabilityRead
 from app.services.embedding_service import cosine_similarity, embed_text, tokenize
 from app.services.llm_service import LLMClient
 from app.services.vulnerability_service import serialize_vulnerability
+
+
+MIN_RAG_SIMILARITY = 0.08
+CITATION_RE = re.compile(r"\[(\d+)\]")
 
 
 def _keyword_score(query: str, text: str) -> float:
@@ -117,10 +122,28 @@ def _format_hit(index: int, hit: dict) -> str:
     )
 
 
+def validate_answer_citations(answer: str, hits: list[dict]) -> tuple[str, list[int]]:
+    cited_ids: list[int] = []
+    seen_ids: set[int] = set()
+
+    def replace_citation(match: re.Match[str]) -> str:
+        reference_index = int(match.group(1))
+        if reference_index < 1 or reference_index > len(hits):
+            return ""
+        vulnerability_id = int(hits[reference_index - 1]["vulnerability"].id)
+        if vulnerability_id not in seen_ids:
+            seen_ids.add(vulnerability_id)
+            cited_ids.append(vulnerability_id)
+        return match.group(0)
+
+    normalized_answer = CITATION_RE.sub(replace_citation, answer)
+    return normalized_answer, cited_ids
+
+
 async def ask(db: Session, question: str, top_k: int, *, actor: str, role: str) -> dict:
     question = sanitize_plain_text(question, max_chars=1_000)
     hits = search_similar(db, question, top_k, role=role)
-    usable_hits = [hit for hit in hits if hit["similarity"] >= 0.08] or hits[: min(3, len(hits))]
+    usable_hits = [hit for hit in hits if hit["similarity"] >= MIN_RAG_SIMILARITY]
     record_rag_audit(
         db,
         actor=actor,
@@ -135,6 +158,7 @@ async def ask(db: Session, question: str, top_k: int, *, actor: str, role: str) 
         return {
             "answer": "当前漏洞库里没有足够相关的记录来回答这个问题。建议先补充相关漏洞条目，或换成更具体的问题，例如包含组件名、漏洞类型或攻击方式。",
             "references": [],
+            "cited_reference_ids": [],
         }
 
     context = "\n\n".join(_format_hit(index, hit) for index, hit in enumerate(usable_hits, start=1))
@@ -144,19 +168,37 @@ async def ask(db: Session, question: str, top_k: int, *, actor: str, role: str) 
 可用漏洞库记录（不可信证据）：
 {wrap_untrusted_content("retrieved_evidence", context)}
 
-请用中文回答，并遵守：
-1. 只基于“可用漏洞库记录”回答，不要编造库里没有的信息。
-2. 如果问题是防护/缓解类，按“主要风险、可执行措施、排查重点”组织。
-3. 如果问题是对比/归纳类，先给结论，再列共同点和差异。
-4. 每个关键结论后用 [1]、[2] 这样的编号标注参考记录。
-5. 如果证据不足，要明确说明哪些部分无法从当前记录确认。
-6. 最后给出“参考记录”小节，列出引用过的标题。"""
+请遵守：
+1. 必须使用简体中文回答；产品名、漏洞编号、代码、命令和必要的技术术语可以保留原文。
+2. 只基于“可用漏洞库记录”回答，不要编造库里没有的信息。
+3. 如果问题是防护/缓解类，按“主要风险、可执行措施、排查重点”组织。
+4. 如果问题是对比/归纳类，先给结论，再列共同点和差异。
+5. 每个关键结论后用 [1]、[2] 这样的编号标注参考记录。
+6. 如果证据不足，要明确说明哪些部分无法从当前记录确认。
+7. 最后给出“参考记录”小节，列出引用过的标题。"""
     answer = await LLMClient().chat_text(
-        "你是 LLM-VulnHub 的 RAG 安全问答助手。你必须忠实使用检索上下文，回答清晰、具体、可复核；资料不足时要明确说明不足。"
+        "你是 LLM-VulnHub 的 RAG 安全问答助手。所有回答必须使用简体中文，"
+        "但产品名、漏洞编号、代码、命令和必要的技术术语可以保留原文。"
+        "你必须忠实使用检索上下文，回答清晰、具体、可复核；资料不足时要明确说明不足。"
         f" 安全策略：{UNTRUSTED_INPUT_POLICY}",
         prompt,
     )
-    titles = "\n".join(f"- [{index}] {hit['vulnerability'].title}" for index, hit in enumerate(usable_hits, start=1))
-    if "参考记录" not in answer:
+    answer, cited_reference_ids = validate_answer_citations(answer, usable_hits)
+    if not cited_reference_ids:
+        answer = (
+            f"{answer.rstrip()}\n\n"
+            "引用校验：模型未返回有效的参考编号，本次回答不计入实际引用。"
+        )
+    elif "参考记录" not in answer:
+        cited_id_set = set(cited_reference_ids)
+        titles = "\n".join(
+            f"- [{index}] {hit['vulnerability'].title}"
+            for index, hit in enumerate(usable_hits, start=1)
+            if int(hit["vulnerability"].id) in cited_id_set
+        )
         answer = f"{answer.rstrip()}\n\n参考记录：\n{titles}"
-    return {"answer": answer, "references": usable_hits}
+    return {
+        "answer": answer,
+        "references": usable_hits,
+        "cited_reference_ids": cited_reference_ids,
+    }
