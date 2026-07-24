@@ -7,6 +7,12 @@ from app.db.models import Task
 from app.db.session import get_db
 from app.schemas.task import TaskListResponse, TaskRead
 from app.services.task_dispatch_registry import UnsupportedTaskTypeError, get_task_dispatcher
+from app.services.task_service import (
+    ActiveTaskDeletionError,
+    delete_task_record,
+    delete_tasks_for_source,
+    list_task_source_groups,
+)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -48,6 +54,14 @@ def list_tasks(
     }
 
 
+@router.get("/source-groups")
+def get_task_source_groups(
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("admin")),
+):
+    return list_task_source_groups(db)
+
+
 @router.get("/{task_id}", response_model=TaskRead)
 def get_task(
     task_id: int,
@@ -58,6 +72,35 @@ def get_task(
     if not task:
         raise HTTPException(404, "task not found")
     return task
+
+
+@router.delete("/by-source/{source_id}")
+def delete_tasks_by_source(
+    source_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("admin")),
+):
+    try:
+        deleted_count = delete_tasks_for_source(db, source_id)
+    except ActiveTaskDeletionError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "source_id": source_id, "deleted_count": deleted_count}
+
+
+@router.delete("/{task_id}")
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    identity: RequestIdentity = Depends(require_role("admin")),
+):
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(404, "task not found")
+    try:
+        delete_task_record(db, task)
+    except ActiveTaskDeletionError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "task_id": task_id}
 
 
 @router.post("/{task_id}/retry", response_model=TaskRead)

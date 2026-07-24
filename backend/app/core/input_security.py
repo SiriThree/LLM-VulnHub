@@ -271,8 +271,21 @@ async def safe_http_get(
             current_url = urljoin(current_url, location)
             continue
 
+        # ``aiter_bytes`` returns decoded response bytes. Do not carry transport
+        # encoding metadata into the reconstructed response, otherwise httpx
+        # attempts to decompress the already-decoded body a second time.
+        decoded_headers = {
+            key: value
+            for key, value in headers.items()
+            if key.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+        }
         request = httpx.Request("GET", current_url)
-        return httpx.Response(status_code=status_code, headers=headers, content=bytes(content), request=request)
+        return httpx.Response(
+            status_code=status_code,
+            headers=decoded_headers,
+            content=bytes(content),
+            request=request,
+        )
 
     raise InputSecurityError("source response exceeded the redirect limit")
 

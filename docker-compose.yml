@@ -29,6 +29,7 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
       AUTH_ANALYST_PASSWORD: ${AUTH_ANALYST_PASSWORD:-}
       AUTH_VIEWER_PASSWORD: ${AUTH_VIEWER_PASSWORD:-}
@@ -58,6 +59,7 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       EMBEDDING_CACHE_DIR: /models/fastembed
     volumes:

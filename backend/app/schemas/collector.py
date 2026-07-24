@@ -104,6 +104,9 @@ class SourceHealthRead(BaseModel):
     enabled: bool
     interval_minutes: int
     last_collected_at: datetime | None = None
+    last_attempted_at: datetime | None = None
+    last_run_status: str | None = None
+    last_run_error: str | None = None
     status: str
     trust_score: int
     trust_level: str

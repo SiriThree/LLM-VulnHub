@@ -434,4 +434,7 @@ Remove-Item backend\celerybeat-schedule.* -Force
 
 ### GitHub Advisory 限流
 
-配置 `GITHUB_TOKEN`。公开 Advisory 读取场景通常只需要最小只读能力。
+1. 在 GitHub 创建 fine-grained personal access token。公开 Advisory 读取场景不需要授予仓库权限。
+2. 在项目根目录 `.env` 中配置 `GITHUB_TOKEN=你的令牌`，不要添加引号，也不要提交 `.env`。
+3. Docker Compose 环境执行 `docker compose up -d --force-recreate backend worker`，让后端接口和采集 Worker 读取新变量；无需重新构建镜像。
+4. 可执行 `docker compose exec -T worker python -c "from app.core.config import get_settings; print(bool(get_settings().github_token))"` 检查 Worker 是否读到 Token。命令只输出 `True/False`，不会显示令牌。

@@ -44,6 +44,7 @@ def build_source_health(
                 crawl_runs.append({**run, "_task_status": task.status})
 
     recent_runs = crawl_runs[:10]
+    latest_run = recent_runs[0] if recent_runs else None
     success_runs = sum(
         1
         for run in recent_runs
@@ -132,6 +133,9 @@ def build_source_health(
         "enabled": source.enabled,
         "interval_minutes": source.interval_minutes,
         "last_collected_at": source.last_collected_at,
+        "last_attempted_at": (latest_run or {}).get("started_at"),
+        "last_run_status": (latest_run or {}).get("status"),
+        "last_run_error": (latest_run or {}).get("error"),
         "status": runtime_status,
         "trust_score": score,
         "trust_level": trust_level,

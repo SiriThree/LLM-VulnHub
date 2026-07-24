@@ -1,13 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Archive, RefreshCw, RotateCcw } from "lucide-react";
+import { Archive, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHero } from "@/components/page-hero";
 import { Pagination } from "@/components/pagination";
-import { api, DeadLetterTask, TaskListResponse, TaskRecord } from "@/lib/api";
+import {
+  api,
+  AuthSession,
+  DeadLetterTask,
+  TaskListResponse,
+  TaskRecord,
+} from "@/lib/api";
+
+type TaskSourceGroup = {
+  source_id: number;
+  source_name: string;
+  task_count: number;
+  active_count: number;
+};
 
 const STAGE_LABELS: Record<string, string> = {
   queued: "排队中",
@@ -60,7 +73,11 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [deadLetters, setDeadLetters] = useState<DeadLetterTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
+  const [canDeleteTasks, setCanDeleteTasks] = useState(false);
+  const [sourceGroups, setSourceGroups] = useState<TaskSourceGroup[]>([]);
+  const [deleteSourceId, setDeleteSourceId] = useState("");
   const [failedTasks, setFailedTasks] = useState<TaskRecord[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -109,6 +126,19 @@ export default function TasksPage() {
     return () => window.clearInterval(timer);
   }, [page, pageSize, taskStatus]);
 
+  useEffect(() => {
+    api<AuthSession>("/auth/status")
+      .then(async (session) => {
+        const isAdmin = session.role === "admin";
+        setCanDeleteTasks(isAdmin);
+        setSourceGroups(isAdmin ? await api<TaskSourceGroup[]>("/tasks/source-groups") : []);
+      })
+      .catch(() => {
+        setCanDeleteTasks(false);
+        setSourceGroups([]);
+      });
+  }, []);
+
   async function retryTask(taskId: number) {
     setMessage("");
     try {
@@ -142,7 +172,52 @@ export default function TasksPage() {
     }
   }
 
+  async function deleteTask(task: TaskRecord | DeadLetterTask) {
+    if (!canDeleteTasks || task.status === "pending" || task.status === "queued" || task.status === "running") return;
+    if (!window.confirm(`确认删除任务 #${task.id}？该任务的执行记录和错误信息将无法恢复。`)) return;
+    setDeleting(true);
+    setMessage("");
+    try {
+      await api(`/tasks/${task.id}`, { method: "DELETE" });
+      setMessage(`任务 #${task.id} 已删除。`);
+      setSourceGroups(await api<TaskSourceGroup[]>("/tasks/source-groups"));
+      if (tasks.length === 1 && page > 1) {
+        setPage((current) => current - 1);
+      } else {
+        await load();
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除任务失败。");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function deleteTasksBySource() {
+    if (!canDeleteTasks || !deleteSourceId) return;
+    const source = sourceGroups.find((item) => item.source_id === Number(deleteSourceId));
+    if (!source) return;
+    if (!window.confirm(
+      `确认删除采集源“${source.source_name}”关联的 ${source.task_count} 条已结束任务？多源采集任务只要包含该来源，也会被删除。`,
+    )) return;
+    setDeleting(true);
+    setMessage("");
+    try {
+      const result = await api<{ deleted_count: number }>(`/tasks/by-source/${source.source_id}`, { method: "DELETE" });
+      setMessage(`已删除采集源“${source.source_name}”关联的 ${result.deleted_count} 条任务。`);
+      setPage(1);
+      setDeleteSourceId("");
+      setSourceGroups(await api<TaskSourceGroup[]>("/tasks/source-groups"));
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "按采集源删除任务失败。");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const activeCount = stats.queued + stats.running;
+  const selectedSourceGroup = sourceGroups.find((item) => item.source_id === Number(deleteSourceId));
 
   return (
     <div className="space-y-5">
@@ -205,6 +280,17 @@ export default function TasksPage() {
                     <Archive size={16} />
                     转为死信
                   </Button>
+                  {canDeleteTasks ? (
+                    <Button
+                      type="button"
+                      className="border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                      disabled={deleting}
+                      onClick={() => deleteTask(item)}
+                    >
+                      <Trash2 size={16} />
+                      删除
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -233,10 +319,23 @@ export default function TasksPage() {
                     尝试 {item.attempt_count}/{item.max_attempts} · 阶段 {item.current_stage || "-"} · 队列 {item.queue_name || "-"} · 更新时间 {new Date(item.updated_at).toLocaleString()}
                   </div>
                 </div>
-                <Button type="button" onClick={() => requeueDeadLetter(item.id)}>
-                  <RotateCcw size={16} />
-                  重新入队
-                </Button>
+                <div className="flex gap-2">
+                  <Button type="button" onClick={() => requeueDeadLetter(item.id)}>
+                    <RotateCcw size={16} />
+                    重新入队
+                  </Button>
+                  {canDeleteTasks ? (
+                    <Button
+                      type="button"
+                      className="border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                      disabled={deleting}
+                      onClick={() => deleteTask(item)}
+                    >
+                      <Trash2 size={16} />
+                      删除
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             </div>
           ))}
@@ -260,21 +359,51 @@ export default function TasksPage() {
             <div className="font-semibold">任务列表</div>
             <div className="mt-1 text-sm text-slate-500">共 {total} 条任务记录</div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-500">
-            分类
-            <select
-              className="h-10 rounded-md border border-border bg-white px-3 text-sm text-slate-700"
-              value={taskStatus}
-              onChange={(event) => {
-                setPage(1);
-                setTaskStatus(event.target.value);
-              }}
-            >
-              <option value="">全部任务</option>
-              <option value="success">成功任务</option>
-              <option value="failed">失败任务</option>
-            </select>
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            {canDeleteTasks ? (
+              <div className="flex items-center gap-2">
+                <select
+                  className="h-10 min-w-44 rounded-md border border-border bg-white px-3 text-sm text-slate-700"
+                  value={deleteSourceId}
+                  onChange={(event) => setDeleteSourceId(event.target.value)}
+                  aria-label="选择需要清理任务的采集源"
+                >
+                  <option value="">选择采集源</option>
+                  {sourceGroups.map((source) => (
+                    <option key={source.source_id} value={source.source_id}>
+                      {source.source_name} · {source.task_count} 条
+                      {source.active_count ? ` · ${source.active_count} 条活跃` : ""}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  className="border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                  disabled={!deleteSourceId || deleting || Boolean(selectedSourceGroup?.active_count)}
+                  title={selectedSourceGroup?.active_count ? "该来源仍有活跃任务，结束后才能批量删除" : "删除该来源任务集"}
+                  onClick={deleteTasksBySource}
+                >
+                  <Trash2 size={16} />
+                  删除该来源任务集
+                </Button>
+              </div>
+            ) : null}
+            <label className="flex items-center gap-2 text-sm text-slate-500">
+              分类
+              <select
+                className="h-10 rounded-md border border-border bg-white px-3 text-sm text-slate-700"
+                value={taskStatus}
+                onChange={(event) => {
+                  setPage(1);
+                  setTaskStatus(event.target.value);
+                }}
+              >
+                <option value="">全部任务</option>
+                <option value="success">成功任务</option>
+                <option value="failed">失败任务</option>
+              </select>
+            </label>
+          </div>
         </div>
       </Card>
 
@@ -311,12 +440,30 @@ export default function TasksPage() {
                   {task.output_data.elapsed_seconds != null ? ` · 耗时 ${task.output_data.elapsed_seconds}s` : ""}
                 </p>
               </div>
-              {task.status === "failed" ? (
-                <Button type="button" onClick={() => retryTask(task.id)}>
-                  <RotateCcw size={16} />
-                  重试
-                </Button>
-              ) : null}
+              <div className="flex gap-2">
+                {task.status === "failed" ? (
+                  <Button type="button" onClick={() => retryTask(task.id)}>
+                    <RotateCcw size={16} />
+                    重试
+                  </Button>
+                ) : null}
+                {canDeleteTasks ? (
+                  <Button
+                    type="button"
+                    className="border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                    disabled={deleting || task.status === "pending" || task.status === "queued" || task.status === "running"}
+                    title={
+                      task.status === "pending" || task.status === "queued" || task.status === "running"
+                        ? "运行中的任务不能删除"
+                        : "删除任务"
+                    }
+                    onClick={() => deleteTask(task)}
+                  >
+                    <Trash2 size={16} />
+                    删除
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             <MetricCards task={task} />

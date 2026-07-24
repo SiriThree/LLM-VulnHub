@@ -1,3 +1,4 @@
+import gzip
 import socket
 import unittest
 from unittest.mock import patch
@@ -60,6 +61,26 @@ class InputSecurityTests(unittest.IsolatedAsyncioTestCase):
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as client:
                 with self.assertRaises(InputSecurityError):
                     await safe_http_get(client, "https://public.example/large", max_bytes=10)
+
+    async def test_does_not_decode_compressed_response_twice(self):
+        payload = b'{"items":[{"summary":"security advisory"}]}'
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                content=gzip.compress(payload),
+                headers={"content-encoding": "gzip", "content-type": "application/json"},
+                request=request,
+            )
+
+        public_record = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
+        with patch("app.core.input_security.socket.getaddrinfo", return_value=public_record):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as client:
+                response = await safe_http_get(client, "https://public.example/advisories")
+
+        self.assertEqual(response.content, payload)
+        self.assertNotIn("content-encoding", response.headers)
+        self.assertEqual(response.json()["items"][0]["summary"], "security advisory")
 
     async def test_rejects_chunked_request_body_while_streaming(self):
         app = FastAPI()
