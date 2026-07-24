@@ -49,8 +49,7 @@ export default async function VulnerabilitiesPage({
 
       <PageHero
         title="漏洞库"
-        description="查询和维护经复核的标准化漏洞记录，支持筛选、详情查看与辅助抽取入库。"
-        eyebrow="标准化漏洞知识"
+        description="查询和维护经复核的标准化漏洞记录，支持筛选、详情查看与信息提取入库。"
         actions={canOperate ? (
           <div className="flex gap-2">
             <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-white/20 bg-white/10 px-3 text-sm font-medium text-white hover:bg-white/20" href="/vulnerabilities/new">
@@ -58,7 +57,7 @@ export default async function VulnerabilitiesPage({
               手动新增
             </Link>
             <Link className="inline-flex h-9 items-center rounded-md bg-white px-3 text-sm font-medium text-slate-950 hover:bg-slate-100" href="/ai-extract">
-              辅助抽取
+              信息提取
             </Link>
           </div>
         ) : null}

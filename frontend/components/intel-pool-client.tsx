@@ -21,12 +21,12 @@ import {
 import { useSessionDraft } from "@/lib/use-session-draft";
 
 const STATUS_OPTIONS = [
-  { value: "reviewable", label: "待审核队列" },
+  { value: "reviewable", label: "待处理" },
   { value: "", label: "全部" },
   { value: "pending_review", label: "待人工复核" },
   { value: "triaged", label: "仅完成分流" },
   { value: "approved", label: "已发布" },
-  { value: "ignored", label: "已过滤噪声" },
+  { value: "ignored", label: "已忽略" },
   { value: "rejected", label: "人工驳回" },
 ];
 
@@ -36,7 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "人工驳回",
   triaged: "仅完成分流",
   stored: "已入库",
-  ignored: "已过滤噪声",
+  ignored: "已忽略",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -364,7 +364,6 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
       <PageHero
         title="情报池"
         description="采集结果先进入情报池，经过相关性判断、字段抽取、相似记录比对和人工复核后，再发布到正式漏洞库。"
-        eyebrow="审核与发布工作流"
         actions={<Button type="button" className="border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => load(selectedId)}>
           <RefreshCcw size={16} />
           刷新
@@ -376,23 +375,23 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
       {stats ? (
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
           <Card><div className="text-sm text-slate-500">情报总量</div><div className="mt-3 text-3xl font-semibold">{stats.total}</div></Card>
-          <Card><div className="text-sm text-slate-500">待审核队列</div><div className="mt-3 text-3xl font-semibold">{stats.reviewable}</div></Card>
+          <Card><div className="text-sm text-slate-500">待处理</div><div className="mt-3 text-3xl font-semibold">{stats.reviewable}</div></Card>
           <Card><div className="text-sm text-slate-500">待人工复核</div><div className="mt-3 text-3xl font-semibold">{stats.pending_review}</div></Card>
           <Card><div className="text-sm text-slate-500">高风险待复核</div><div className="mt-3 text-3xl font-semibold">{stats.high_risk_pending_review}</div></Card>
           <Card><div className="text-sm text-slate-500">待合并候选</div><div className="mt-3 text-3xl font-semibold">{stats.merge_candidates_pending}</div></Card>
           <Card><div className="text-sm text-slate-500">已发布</div><div className="mt-3 text-3xl font-semibold">{stats.approved}</div></Card>
-          <Card><div className="text-sm text-slate-500">已过滤噪声</div><div className="mt-3 text-3xl font-semibold">{stats.ignored}</div></Card>
+          <Card><div className="text-sm text-slate-500">已忽略</div><div className="mt-3 text-3xl font-semibold">{stats.ignored}</div></Card>
         </div>
       ) : null}
 
       {reviewStats ? (
         <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-7">
-          <Card><div className="text-sm text-slate-500">审核动作总数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.total_actions}</div></Card>
+          <Card><div className="text-sm text-slate-500">审核记录</div><div className="mt-3 text-3xl font-semibold">{reviewStats.total_actions}</div></Card>
           <Card><div className="text-sm text-slate-500">通过发布</div><div className="mt-3 text-3xl font-semibold">{reviewStats.approvals}</div></Card>
           <Card><div className="text-sm text-slate-500">驳回次数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.rejections}</div></Card>
           <Card><div className="text-sm text-slate-500">合并次数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.merges}</div></Card>
           <Card><div className="text-sm text-slate-500">撤销次数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.undos}</div></Card>
-          <Card><div className="text-sm text-slate-500">24h 审核动作</div><div className="mt-3 text-3xl font-semibold">{reviewStats.last_24h_actions}</div></Card>
+          <Card><div className="text-sm text-slate-500">近 24 小时审核记录</div><div className="mt-3 text-3xl font-semibold">{reviewStats.last_24h_actions}</div></Card>
           <Card><div className="text-sm text-slate-500">参与审核人数</div><div className="mt-3 text-3xl font-semibold">{reviewStats.unique_actors}</div></Card>
         </div>
       ) : null}
@@ -440,7 +439,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
         </Card>
 
         <Card>
-          <div className="text-sm font-semibold">审核人分布</div>
+          <div className="text-sm font-semibold">审核人员统计</div>
           {reviewStats && reviewStats.top_actors.length > 0 ? (
             <div className="mt-3 space-y-3">
               {reviewStats.top_actors.map((actor) => (
@@ -487,7 +486,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
             )) : (
               <div className="p-4 text-sm text-slate-500">
                 {status === "reviewable"
-                  ? "当前没有待审核情报。若想查看被系统过滤的普通安全公告或噪声条目，请切换到“已过滤噪声”。"
+                  ? "当前没有待审核情报。若想查看已判定为不相关的公告或重复内容，请切换到“已忽略”。"
                   : "当前筛选条件下没有情报记录。"}
               </div>
             )}
@@ -574,7 +573,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <ShieldCheck size={16} />
-                    来源可信度与血缘链路
+                    来源与处理记录
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-md border border-border bg-white p-3 text-sm">
@@ -639,7 +638,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
               </div>
 
               <div className="space-y-2">
-                <div className="text-sm font-semibold">结构化抽取结果</div>
+                <div className="text-sm font-semibold">提取结果</div>
                 <div className="grid gap-3 md:grid-cols-2">
                   {([
                     ["title", selected.extracted_data.title],
@@ -720,8 +719,8 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
       <Card className="flex flex-col">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="font-semibold">全局审核动态</div>
-            <div className="mt-1 text-sm text-slate-500">按审核动作分类查看历史记录。</div>
+            <div className="font-semibold">审核记录</div>
+            <div className="mt-1 text-sm text-slate-500">可按操作类型筛选。</div>
           </div>
           <select
             className="h-10 rounded-md border border-border bg-white px-3 text-sm"
@@ -750,7 +749,7 @@ export function IntelligencePoolClient({ initialSelected, initialStatus }: Props
             ))}
           </div>
         ) : (
-          <div className="text-sm text-slate-500">当前还没有审核动态。</div>
+          <div className="text-sm text-slate-500">暂无审核记录。</div>
         )}
         <Pagination
           total={globalActionTotal}

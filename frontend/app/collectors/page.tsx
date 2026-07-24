@@ -274,8 +274,7 @@ export default function CollectorsPage() {
     <div className="space-y-5">
       <PageHero
         title="动态采集控制台"
-        description="展示采集链路运行状态，以及每条情报从数据源到复核入库的可信度信号。"
-        eyebrow="外部情报接入"
+        description="查看数据源、采集任务和待处理文档。"
         actions={<Button type="button" className="border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={load}>
           <RefreshCw size={16} />
           刷新
@@ -330,7 +329,7 @@ export default function CollectorsPage() {
         <Card className="flex h-full flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="font-semibold">实时流水线状态</h2>
+              <h2 className="font-semibold">运行中的采集任务</h2>
               <p className="mt-1 text-sm text-slate-500">当前排队和运行中的采集任务。</p>
             </div>
             <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">{activeTasks.length} 个活跃任务</span>
@@ -567,7 +566,7 @@ export default function CollectorsPage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">待处理队列</h2>
-              <p className="mt-1 text-sm text-slate-500">优先处理等待 AI 分析或等待人工复核的候选文档。</p>
+              <p className="mt-1 text-sm text-slate-500">优先处理等待 AI 分析或等待人工复核的文档。</p>
             </div>
             <Link className="text-sm text-primary hover:underline" href="/intel-pool?status=pending_review">
               进入情报池
@@ -625,7 +624,7 @@ export default function CollectorsPage() {
         <Card className="flex h-full flex-col gap-4">
           <div>
             <h2 className="font-semibold">最近采集结果</h2>
-            <p className="mt-1 text-sm text-slate-500">展示最新进入系统的候选文本，可快速跳转到分析或复核环节。</p>
+            <p className="mt-1 text-sm text-slate-500">显示最近采集的文档及其处理状态。</p>
           </div>
           <div className="flex-1 space-y-3">
             {recentDocs.map((doc: CollectedDocument) => (
@@ -663,7 +662,7 @@ export default function CollectorsPage() {
       <Card className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Activity size={16} />
-          <h2 className="font-semibold">最近运行轨迹</h2>
+          <h2 className="font-semibold">最近运行记录</h2>
         </div>
         <div className="grid flex-1 auto-rows-fr gap-3 md:grid-cols-2 xl:grid-cols-3">
           {recentRuns.map((run) => (

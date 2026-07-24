@@ -101,9 +101,8 @@ export default async function OpsPage({
   return (
     <div className="space-y-5">
       <PageHero
-        title="运行运营"
-        description="集中查看采集调度、任务队列、数据源健康度和模型调用状态。"
-        eyebrow="运行态势"
+        title="运营中心"
+        description="查看采集调度、任务队列、数据源状态和模型调用情况。"
         actions={<div className="flex items-center gap-2 text-sm text-slate-300">
           <Clock3 size={16} />
           <span>调度源 {scheduler.sources.length} 个，Beat 任务 {scheduler.beat_jobs.length} 个</span>
@@ -111,16 +110,16 @@ export default async function OpsPage({
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="队列中" value={metrics.queue_metrics.queued} hint="等待 worker 消费" icon={ListChecks} />
-        <StatCard label="运行中" value={metrics.queue_metrics.running} hint="当前执行任务" icon={Activity} />
-        <StatCard label="成功任务" value={metrics.queue_metrics.success} hint="历史成功完成" icon={Zap} />
-        <StatCard label="异常信号" value={failed} hint="失败任务与源通知" icon={AlertTriangle} />
+        <StatCard label="队列中" value={metrics.queue_metrics.queued} icon={ListChecks} />
+        <StatCard label="运行中" value={metrics.queue_metrics.running}icon={Activity} />
+        <StatCard label="成功任务" value={metrics.queue_metrics.success}icon={Zap} />
+        <StatCard label="异常信号" value={failed}icon={AlertTriangle} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">调度器任务</h2>
+            <h2 className="font-semibold">定时任务</h2>
             <Badge>{scheduler.beat_jobs.length}</Badge>
           </div>
           <div className="space-y-3">
@@ -133,7 +132,7 @@ export default async function OpsPage({
                 </div>
               </div>
             ))}
-            {scheduler.beat_jobs.length === 0 ? <div className="text-sm text-slate-500">暂无 Celery Beat 任务。</div> : null}
+            {scheduler.beat_jobs.length === 0 ? <div className="text-sm text-slate-500">暂无定时任务。</div> : null}
           </div>
           <Pagination
             total={scheduler.beat_jobs.length}

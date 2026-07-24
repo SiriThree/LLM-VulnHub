@@ -65,9 +65,9 @@ export default function LoginPage() {
                 <ShieldCheck size={26} />
               </div>
               <div className="mt-6 text-sm font-medium tracking-wide text-emerald-300">LLM-VulnHub</div>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight">漏洞情报工作台</h1>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight">漏洞情报管理平台</h1>
               <p className="mt-4 max-w-md text-sm leading-7 text-slate-300">
-                登录账号进入采集、审核和知识检索流程；只想了解公开内容，可以直接使用访客模式。
+                登录后可进行采集、审核和漏洞检索；访客可以直接浏览公开内容。
               </p>
             </div>
 
@@ -129,9 +129,6 @@ export default function LoginPage() {
 
             {message ? <div className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{message}</div> : null}
 
-            <div className="mt-6 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-500">
-              会话身份由服务端保存。写操作还会校验与当前会话绑定的 CSRF Token。
-            </div>
           </section>
         </Card>
       </div>

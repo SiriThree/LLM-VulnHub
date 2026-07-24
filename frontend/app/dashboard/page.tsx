@@ -76,9 +76,8 @@ export default async function DashboardPage({
       {isGuest ? <GuestNotice /> : null}
 
       <PageHero
-        title="漏洞情报运营总览"
-        description="集中查看已入库漏洞、风险分布和近期处置重点。"
-        eyebrow="风险工作台"
+        title="漏洞概览"
+        description="查看已入库漏洞、风险分布和近期热点。"
         actions={<div className="flex flex-wrap gap-3">
             {canOperate ? (
               <>
@@ -88,7 +87,7 @@ export default async function DashboardPage({
                 </Link>
                 <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-white/20 bg-white/10 px-4 text-sm font-medium text-white hover:bg-white/20" href="/ai-extract">
                   <Database size={16} />
-                  新增漏洞记录
+                  新增漏洞
                 </Link>
               </>
             ) : (
@@ -104,17 +103,14 @@ export default async function DashboardPage({
         <Card>
           <div className="text-sm text-slate-500">漏洞总数</div>
           <div className="mt-3 text-3xl font-semibold">{stats.total}</div>
-          <div className="mt-2 text-xs text-slate-400">平台内已形成标准记录的漏洞资产</div>
         </Card>
         <Card>
           <div className="text-sm text-slate-500">严重 / 高危</div>
           <div className="mt-3 text-3xl font-semibold">{criticalHigh}</div>
-          <div className="mt-2 text-xs text-slate-400">优先进入人工复核与修复跟踪的记录</div>
         </Card>
         <Card>
           <div className="text-sm text-slate-500">中低风险</div>
           <div className="mt-3 text-3xl font-semibold">{mediumLow}</div>
-          <div className="mt-2 text-xs text-slate-400">更适合归档分析与持续观察</div>
         </Card>
         <Card>
           <div className="text-sm text-slate-500">热点组件</div>
@@ -155,7 +151,7 @@ export default async function DashboardPage({
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="font-semibold">最近新增漏洞</h2>
-              <p className="mt-1 text-sm text-slate-500">适合在演示时展示平台最新入库结果。</p>
+              <p className="mt-1 text-sm text-slate-500">最近入库的漏洞记录。</p>
             </div>
             <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" href="/vulnerabilities">
               查看全部
@@ -191,8 +187,8 @@ export default async function DashboardPage({
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="font-semibold">高优先级漏洞</h2>
-              <p className="mt-1 text-sm text-slate-500">按风险分值排序，便于安排复核和处置顺序。</p>
+              <h2 className="font-semibold">高风险漏洞</h2>
+              <p className="mt-1 text-sm text-slate-500">按风险评分从高到低排列。</p>
             </div>
             {canOperate ? (
               <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" href="/intel-pool">
