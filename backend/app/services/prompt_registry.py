@@ -4,10 +4,14 @@ from app.core.input_security import UNTRUSTED_INPUT_POLICY, wrap_untrusted_conte
 
 
 UNTRUSTED_FIELDS = {"text", "intel", "candidates", "vulnerability", "factors", "merge", "risk_reason"}
+OUTPUT_LANGUAGE_POLICY = (
+    "Output language policy: all natural-language string values must use Simplified Chinese. "
+    "Product names, vulnerability identifiers, code, commands, JSON keys, and necessary technical terms may remain unchanged."
+)
 
 
 def guarded_system_prompt(role: str) -> str:
-    return f"{role}\n\nSecurity policy: {UNTRUSTED_INPUT_POLICY}"
+    return f"{role}\n\n{OUTPUT_LANGUAGE_POLICY}\n\nSecurity policy: {UNTRUSTED_INPUT_POLICY}"
 
 
 @dataclass(frozen=True)

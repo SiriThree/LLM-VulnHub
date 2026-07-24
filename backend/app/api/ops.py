@@ -10,12 +10,7 @@ from app.schemas.ops import (
     PromptRegistryItemRead,
     SchedulerOverviewRead,
 )
-from app.services.collector_service import (
-    dispatch_analysis_task,
-    dispatch_collection_task,
-    dispatch_notification_task,
-    dispatch_review_task,
-)
+from app.services.task_dispatch_registry import UnsupportedTaskTypeError, get_task_dispatcher
 from app.services.ops_service import (
     get_ops_metrics,
     get_scheduler_overview,
@@ -63,6 +58,10 @@ def requeue_dead_letter(
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "task not found")
+    try:
+        dispatcher = get_task_dispatcher(task.task_type)
+    except UnsupportedTaskTypeError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
     output = dict(task.output_data or {})
     output["dead_letter"] = False
@@ -82,14 +81,7 @@ def requeue_dead_letter(
     db.commit()
     db.refresh(task)
 
-    if task.task_type == "crawl":
-        dispatch_collection_task(task.id)
-    elif task.task_type == "analyze_document":
-        dispatch_analysis_task(task.id)
-    elif task.task_type == "review_helper":
-        dispatch_review_task(task.id)
-    elif task.task_type == "notification":
-        dispatch_notification_task(task.id)
+    dispatcher(task.id)
 
     return next((item for item in list_dead_letter_tasks(db) if item["id"] == task.id), {
         "id": task.id,

@@ -25,6 +25,8 @@ from app.services.intel_service import (
     undo_intelligence_review,
 )
 from app.services.notification_service import get_notification_stats
+from app.services.prompt_registry import PROMPT_REGISTRY
+from app.workflows.vuln_analysis_graph import report_node
 
 
 class WorkflowUxTests(unittest.TestCase):
@@ -40,6 +42,39 @@ class WorkflowUxTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         self.engine.dispose()
+
+    def test_analysis_prompts_and_report_require_simplified_chinese(self):
+        self.assertTrue(
+            all("Simplified Chinese" in prompt.system_prompt for prompt in PROMPT_REGISTRY.values())
+        )
+        state = {
+            "extracted_fields": {
+                "title": "测试漏洞",
+                "vuln_type": "提示注入",
+                "severity": "高危",
+                "score": 80,
+                "affected_component": "RAG",
+                "description": "测试描述",
+                "attack_method": "恶意文档",
+                "impact": "数据泄露",
+                "mitigation": "隔离不可信内容",
+            },
+            "similar": [],
+            "asset_impact_details": {},
+            "asset_impact_summary": "影响检索链路",
+            "risk_reason": "可能导致越权访问",
+            "review_summary": "需要人工复核",
+            "risk_priority": "高",
+            "score": 80,
+            "severity": "高危",
+        }
+
+        report = report_node(state)["report"]
+
+        self.assertIn("## 漏洞描述", report)
+        self.assertIn("## 修复建议", report)
+        self.assertIn("## 复核意见", report)
+        self.assertNotIn("## Description", report)
 
     def test_duplicate_source_url_and_type_are_rejected(self):
         payload = DataSourceCreate(
