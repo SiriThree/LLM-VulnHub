@@ -1030,11 +1030,61 @@ async def _run_collection(db: Session, task: Task) -> dict[str, Any]:
         sources = db.scalars(stmt).all()
         _merge_output(task, db, {"source_total": len(sources)})
 
-        for source in sources:
-            await _process_source(db, task, source)
+        if source_id and not sources:
+            raise ValueError(f"Requested source #{source_id} does not exist or is disabled.")
 
-        task.status = "success"
-        _append_stage(task, db, "completed", "success", "Collection pipeline completed.")
+        failed_sources: list[dict[str, Any]] = []
+        successful_sources = 0
+        for source in sources:
+            if await _process_source(db, task, source):
+                successful_sources += 1
+                continue
+            source_run = next(
+                (
+                    run
+                    for run in (task.output_data or {}).get("source_runs", [])
+                    if run.get("source_id") == source.id
+                ),
+                {},
+            )
+            failed_sources.append(
+                {
+                    "source_id": source.id,
+                    "source_name": source.name,
+                    "error": source_run.get("error") or "Unknown collection error.",
+                }
+            )
+
+        _merge_output(
+            task,
+            db,
+            {
+                "source_success_count": successful_sources,
+                "source_failure_count": len(failed_sources),
+                "partial_success": successful_sources > 0 and bool(failed_sources),
+                "failed_sources": failed_sources,
+            },
+        )
+        if failed_sources:
+            failed_names = ", ".join(item["source_name"] for item in failed_sources)
+            error_message = f"{len(failed_sources)} of {len(sources)} sources failed: {failed_names}"
+            task.status = "failed"
+            task.error_message = error_message
+            _append_stage(
+                task,
+                db,
+                "completed",
+                "failed",
+                f"Collection task failed because one or more sources failed: {failed_names}.",
+                {
+                    "source_success_count": successful_sources,
+                    "source_failure_count": len(failed_sources),
+                },
+            )
+            _mark_dead_letter_if_needed(task, db, error_message)
+        else:
+            task.status = "success"
+            _append_stage(task, db, "completed", "success", "Collection pipeline completed.")
     except Exception as exc:
         task.status = "failed"
         task.error_message = str(exc)
@@ -1353,7 +1403,7 @@ async def _run_notification(db: Session, task: Task) -> dict[str, Any]:
     return {"task_id": task.id, "status": task.status, "notification": notification}
 
 
-async def _process_source(db: Session, task: Task, source: DataSource) -> None:
+async def _process_source(db: Session, task: Task, source: DataSource) -> bool:
     started_at = utcnow()
     _upsert_source_run(
         task,
@@ -1410,6 +1460,7 @@ async def _process_source(db: Session, task: Task, source: DataSource) -> None:
                 },
             },
         )
+        return True
     except Exception as exc:
         error_message = _format_exception_message(exc)
         _update_metrics(task, db, failed=1)
@@ -1441,6 +1492,7 @@ async def _process_source(db: Session, task: Task, source: DataSource) -> None:
                 "event": {"stage": "failed", "message": error_message},
             },
         )
+        return False
 
 
 async def _process_candidate(db: Session, task: Task, source: DataSource, item: dict[str, str]) -> None:

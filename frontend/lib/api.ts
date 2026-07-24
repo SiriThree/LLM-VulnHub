@@ -437,6 +437,9 @@ export type SourceHealth = {
   enabled: boolean;
   interval_minutes: number;
   last_collected_at?: string | null;
+  last_attempted_at?: string | null;
+  last_run_status?: string | null;
+  last_run_error?: string | null;
   status: string;
   trust_score: number;
   trust_level: string;

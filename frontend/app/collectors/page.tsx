@@ -33,11 +33,38 @@ type RunResponse = {
 type SourceEditForm = Pick<DataSource, "name" | "source_type" | "url" | "enabled" | "interval_minutes">;
 
 const DEFAULT_SOURCE_FORM = {
-  name: "OpenAI Security News",
-  source_type: "web",
-  url: "https://openai.com/news/security/",
-  interval_minutes: 240,
+  name: "arXiv Prompt Injection",
+  source_type: "rss",
+  url: "https://export.arxiv.org/api/query?search_query=all%3A%22prompt%20injection%22&start=0&max_results=30&sortBy=submittedDate&sortOrder=descending",
+  interval_minutes: 1440,
 };
+
+const SOURCE_EXAMPLES = [
+  {
+    name: "arXiv Prompt Injection",
+    source_type: "rss",
+    url: "https://export.arxiv.org/api/query?search_query=all%3A%22prompt%20injection%22&start=0&max_results=30&sortBy=submittedDate&sortOrder=descending",
+    interval_minutes: 1440,
+    description: "提示注入、智能体攻击与防护研究，建议每天采集一次。",
+    requiresToken: false,
+  },
+  {
+    name: "arXiv LLM Security",
+    source_type: "rss",
+    url: "https://export.arxiv.org/api/query?search_query=all%3A%22large%20language%20model%22%20AND%20all%3Asecurity&start=0&max_results=30&sortBy=submittedDate&sortOrder=descending",
+    interval_minutes: 1440,
+    description: "大模型安全相关研究，覆盖范围较广，建议每天采集一次。",
+    requiresToken: false,
+  },
+  {
+    name: "GitHub Security Advisories",
+    source_type: "github",
+    url: "https://api.github.com/advisories?per_page=30&sort=updated&direction=desc",
+    interval_minutes: 60,
+    description: "GitHub 全局安全公告；稳定采集需要服务端配置 GITHUB_TOKEN。",
+    requiresToken: true,
+  },
+] as const;
 
 const DOC_STATUS_LABELS: Record<string, string> = {
   queued_analysis: "等待 AI 分析",
@@ -300,7 +327,36 @@ export default function CollectorsPage() {
             <h2 className="font-semibold">新增数据源</h2>
             <p className="mt-1 text-sm text-slate-500">支持 RSS、安全博客页面、官方公告页和 GitHub Advisory。</p>
           </div>
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className="grid gap-2 md:grid-cols-3">
+            {SOURCE_EXAMPLES.map((example) => (
+              <button
+                key={example.name}
+                type="button"
+                className="rounded-md border border-border bg-slate-50 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50/40"
+                onClick={() => setForm({
+                  name: example.name,
+                  source_type: example.source_type,
+                  url: example.url,
+                  interval_minutes: example.interval_minutes,
+                })}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-slate-800">{example.name}</span>
+                  {example.requiresToken ? (
+                    <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700">需要 Token</span>
+                  ) : (
+                    <span className="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-700">直接使用</span>
+                  )}
+                </span>
+                <span className="mt-2 block text-xs leading-5 text-slate-500">{example.description}</span>
+                <span className="mt-2 block text-xs text-blue-600">填入下方表单</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500">
+            示例只会填充表单，不会自动创建。GitHub Token 仅在服务端环境变量中配置，不会传到浏览器。
+          </p>
+          <div className="grid gap-3 md:grid-cols-6">
             <Input maxLength={160} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="数据源名称" />
             <select
               className="h-10 rounded-md border border-border bg-background px-3 text-sm"
@@ -318,6 +374,15 @@ export default function CollectorsPage() {
               value={form.url}
               onChange={(e) => setForm({ ...form, url: e.target.value })}
               placeholder="URL / 文件路径"
+            />
+            <Input
+              type="number"
+              min={1}
+              max={10080}
+              value={form.interval_minutes}
+              onChange={(e) => setForm({ ...form, interval_minutes: Number(e.target.value) })}
+              placeholder="采集周期（分钟）"
+              aria-label="采集周期（分钟）"
             />
             <Button onClick={createSource} disabled={submitting || !canManageSources}>
               <Plus size={16} />
@@ -488,11 +553,12 @@ export default function CollectorsPage() {
                   <>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600">
                       <div>总文档 {health.documents_total}</div>
+                      <div>最近发现 {health.recent_discovered}</div>
                       <div>AI 命中 {health.ai_related_documents}</div>
                       <div>待复核 {health.pending_review_documents}</div>
                       <div>已入库 {health.stored_documents}</div>
                       <div>去重命中 {health.duplicate_documents}</div>
-                      <div>成功率 {Math.round(health.success_rate * 100)}%</div>
+                      <div>最近失败 {health.recent_failure_count}</div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
                       <div>请求成功 {Math.round(health.request_success_rate * 100)}%</div>
@@ -512,9 +578,21 @@ export default function CollectorsPage() {
                   <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-500">暂时没有该来源的运行质量数据。</div>
                 )}
 
-                <div className="mt-3 text-xs text-slate-400">
-                  周期 {source.interval_minutes} min · 最近采集 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "尚未采集"}
+                <div className="mt-3 space-y-1 text-xs text-slate-400">
+                  <div>
+                    周期 {source.interval_minutes} min · 最近尝试{" "}
+                    {health?.last_attempted_at ? new Date(health.last_attempted_at).toLocaleString() : "尚未运行"}
+                    {health?.last_run_status ? ` · ${health.last_run_status === "success" ? "成功" : health.last_run_status === "failed" ? "失败" : "运行中"}` : ""}
+                  </div>
+                  <div>
+                    最近成功 {source.last_collected_at ? new Date(source.last_collected_at).toLocaleString() : "暂无成功记录"}
                   {health?.freshness_minutes != null ? ` · 距今 ${health.freshness_minutes} min` : ""}
+                  </div>
+                  {health?.last_run_error ? (
+                    <div className="line-clamp-2 text-rose-600" title={health.last_run_error}>
+                      最近错误：{health.last_run_error}
+                    </div>
+                  ) : null}
                 </div>
                 <div className={`mt-auto grid gap-2 pt-4 ${canManageSources ? "grid-cols-3" : "grid-cols-1"}`}>
                   <Button className="h-8 w-full gap-1 px-2 text-xs" onClick={() => run(source.id)} disabled={submitting || !source.enabled}>
